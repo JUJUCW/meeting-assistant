@@ -1,9 +1,14 @@
+# server.py
 import uuid
 import threading
 import tempfile
 import os
+from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+import whisper
+import analyzer
+import storage
 
 app = FastAPI()
 
@@ -14,7 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory job store: { job_id: { "status": "pending"|"processing"|"done"|"error", "segments": [...], "error": str } }
+# In-memory job store
 jobs: dict = {}
 jobs_lock = threading.Lock()
 
@@ -22,7 +27,6 @@ ALLOWED_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm"}
 
 
 def _run_transcription(job_id: str, file_path: str):
-    import whisper
     with jobs_lock:
         jobs[job_id]["status"] = "processing"
     try:
@@ -32,8 +36,47 @@ def _run_transcription(job_id: str, file_path: str):
             {"id": i, "text": seg["text"].strip(), "tag": None}
             for i, seg in enumerate(result["segments"])
         ]
+
+        # AI analysis
+        transcript = "\n".join(s["text"] for s in segments)
+        pending_items = storage.get_pending_action_items()
+        analysis, ollama_available = analyzer.analyze(transcript, pending_items)
+
+        # Assign IDs to decisions and action items
+        decisions = [
+            {"id": f"d-{i+1}", "status": "confirmed", **d}
+            for i, d in enumerate(analysis["decisions"])
+        ]
+        action_items = [
+            {"id": f"a-{i+1}", "status": "pending", **a}
+            for i, a in enumerate(analysis["action_items"])
+        ]
+
+        # Save meeting
+        meeting_id = datetime.now().strftime("%Y-%m-%d_%H-%M")
+        meeting = {
+            "id": meeting_id,
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+            "transcript": transcript,
+            "decisions": decisions,
+            "action_items": action_items,
+        }
+        storage.save_meeting(meeting)
+
+        # Resolve historical items
+        item_id_to_meeting = {item["id"]: item["meeting_id"] for item in pending_items}
+        for item_id in analysis["resolved_action_item_ids"]:
+            source_meeting = item_id_to_meeting.get(item_id)
+            if source_meeting:
+                storage.resolve_action_item(source_meeting, item_id)
+
         with jobs_lock:
             jobs[job_id]["segments"] = segments
+            jobs[job_id]["decisions"] = decisions
+            jobs[job_id]["action_items"] = action_items
+            jobs[job_id]["resolved_item_ids"] = analysis["resolved_action_item_ids"]
+            jobs[job_id]["meeting_id"] = meeting_id
+            jobs[job_id]["ollama_available"] = ollama_available
             jobs[job_id]["status"] = "done"
     except Exception as e:
         with jobs_lock:
@@ -52,7 +95,6 @@ async def transcribe(file: UploadFile = File(...)):
             status_code=400,
             detail=f"Unsupported format. Allowed: {', '.join(ALLOWED_EXTENSIONS)}",
         )
-    # Save to temp file
     suffix = ext
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(await file.read())
@@ -60,7 +102,16 @@ async def transcribe(file: UploadFile = File(...)):
 
     job_id = str(uuid.uuid4())
     with jobs_lock:
-        jobs[job_id] = {"status": "pending", "segments": [], "error": None}
+        jobs[job_id] = {
+            "status": "pending",
+            "segments": [],
+            "decisions": [],
+            "action_items": [],
+            "resolved_item_ids": [],
+            "meeting_id": None,
+            "ollama_available": None,
+            "error": None,
+        }
     thread = threading.Thread(target=_run_transcription, args=(job_id, tmp_path), daemon=True)
     thread.start()
     return {"job_id": job_id}
@@ -88,4 +139,37 @@ def result(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
     if job["status"] != "done":
         raise HTTPException(status_code=202, detail="Not ready yet")
-    return {"segments": job["segments"]}
+    return {
+        "segments": job["segments"],
+        "decisions": job["decisions"],
+        "action_items": job["action_items"],
+        "resolved_item_ids": job["resolved_item_ids"],
+        "meeting_id": job["meeting_id"],
+        "ollama_available": job["ollama_available"],
+    }
+
+
+@app.get("/meetings")
+def list_meetings():
+    return {"meetings": storage.list_meetings()}
+
+
+@app.get("/meetings/{meeting_id}")
+def get_meeting(meeting_id: str):
+    meeting = storage.load_meeting(meeting_id)
+    if meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    return meeting
+
+
+@app.get("/action-items/pending")
+def get_pending_action_items():
+    return {"items": storage.get_pending_action_items()}
+
+
+@app.post("/action-items/{meeting_id}/{item_id}/resolve")
+def resolve_action_item(meeting_id: str, item_id: str):
+    ok = storage.resolve_action_item(meeting_id, item_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return {"status": "done"}
