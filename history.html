@@ -324,6 +324,48 @@
 
     .section { margin-bottom: 40px; }
 
+    /* ── Transcript Collapsible ── */
+    .transcript-toggle {
+      background: none;
+      border: none;
+      cursor: pointer;
+      width: 100%;
+      text-align: left;
+      padding: 0;
+      color: var(--gold);
+      font-family: var(--font-display);
+      font-size: 14px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .transcript-toggle::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--gold-dim);
+    }
+    .toggle-icon {
+      font-size: 10px;
+      transition: transform 0.2s;
+      flex-shrink: 0;
+    }
+    .transcript-toggle[aria-expanded="true"] .toggle-icon {
+      transform: rotate(90deg);
+    }
+    .transcript-body {
+      margin-top: 16px;
+    }
+    #transcript-text {
+      font-size: 13px;
+      line-height: 1.8;
+      color: var(--muted);
+      white-space: pre-wrap;
+      letter-spacing: 0.02em;
+    }
+
     /* ── Decision Item ── */
     .decision-item {
       background: var(--card-bg);
@@ -583,6 +625,15 @@
       <button id="back-btn">← 返回列表</button>
       <div id="detail-date"></div>
 
+      <div class="section" id="transcript-section" style="display:none">
+        <button class="transcript-toggle" id="transcript-toggle" aria-expanded="false">
+          逐字稿 <span class="toggle-icon">▶</span>
+        </button>
+        <div class="transcript-body" id="transcript-body" style="display:none">
+          <p id="transcript-text"></p>
+        </div>
+      </div>
+
       <div class="section" id="decisions-section">
         <div class="section-heading">決議事項</div>
         <div id="decisions-list"></div>
@@ -803,6 +854,21 @@
 
         renderDecisions(meeting);
         renderActionItems(meeting);
+
+        // Transcript
+        const transcript = meeting.transcript || '';
+        const transcriptSection = document.getElementById('transcript-section');
+        const transcriptText = document.getElementById('transcript-text');
+        const transcriptToggle = document.getElementById('transcript-toggle');
+        const transcriptBody = document.getElementById('transcript-body');
+        if (transcript) {
+          transcriptSection.style.display = 'block';
+          transcriptText.textContent = transcript;
+          transcriptToggle.setAttribute('aria-expanded', 'false');
+          transcriptBody.style.display = 'none';
+        } else {
+          transcriptSection.style.display = 'none';
+        }
       } catch (err) {
         console.error('openDetail failed:', err);
         const errEl = document.getElementById('list-error');
@@ -1121,6 +1187,15 @@
     async function init() {
       // Wire up back button
       document.getElementById('back-btn').addEventListener('click', closeDetail);
+
+      // Wire up transcript toggle
+      document.getElementById('transcript-toggle').addEventListener('click', () => {
+        const toggle = document.getElementById('transcript-toggle');
+        const body = document.getElementById('transcript-body');
+        const expanded = toggle.getAttribute('aria-expanded') === 'true';
+        toggle.setAttribute('aria-expanded', String(!expanded));
+        body.style.display = expanded ? 'none' : 'block';
+      });
 
       // Check server reachability
       await checkServer();
