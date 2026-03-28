@@ -174,3 +174,99 @@ async def test_result_ollama_unavailable_returns_empty_lists():
                 body = result_res.json()
                 assert body["ollama_available"] is False
                 assert body["decisions"] == []
+
+
+# ── Task 4 tests: new endpoints ──
+
+@pytest.mark.anyio
+async def test_list_meetings_empty():
+    with patch("server.storage") as mock_storage:
+        mock_storage.list_meetings.return_value = []
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            res = await client.get("/meetings")
+        assert res.status_code == 200
+        assert res.json() == {"meetings": []}
+
+
+@pytest.mark.anyio
+async def test_list_meetings_returns_data():
+    meetings_data = [
+        {"id": "2026-03-28_14-30", "created_at": "2026-03-28T14:30:00",
+         "decision_count": 2, "action_item_count": 3}
+    ]
+    with patch("server.storage") as mock_storage:
+        mock_storage.list_meetings.return_value = meetings_data
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            res = await client.get("/meetings")
+        assert res.json()["meetings"][0]["decision_count"] == 2
+
+
+@pytest.mark.anyio
+async def test_get_meeting_found():
+    meeting = {
+        "id": "2026-03-28_14-30", "created_at": "2026-03-28T14:30:00",
+        "transcript": "text", "decisions": [], "action_items": []
+    }
+    with patch("server.storage") as mock_storage:
+        mock_storage.load_meeting.return_value = meeting
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            res = await client.get("/meetings/2026-03-28_14-30")
+        assert res.status_code == 200
+        assert res.json()["id"] == "2026-03-28_14-30"
+
+
+@pytest.mark.anyio
+async def test_get_meeting_not_found():
+    with patch("server.storage") as mock_storage:
+        mock_storage.load_meeting.return_value = None
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            res = await client.get("/meetings/nonexistent")
+        assert res.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_get_pending_action_items():
+    items = [
+        {"id": "a-1", "content": "更新文件", "assignee": "小明",
+         "deadline": "2026-04-01", "priority": "high", "status": "pending",
+         "meeting_id": "2026-03-28_14-30", "meeting_date": "2026-03-28"}
+    ]
+    with patch("server.storage") as mock_storage:
+        mock_storage.get_pending_action_items.return_value = items
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            res = await client.get("/action-items/pending")
+        assert res.status_code == 200
+        assert res.json()["items"][0]["id"] == "a-1"
+
+
+@pytest.mark.anyio
+async def test_resolve_action_item_success():
+    with patch("server.storage") as mock_storage:
+        mock_storage.resolve_action_item.return_value = True
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            res = await client.post("/action-items/2026-03-28_14-30/a-1/resolve")
+        assert res.status_code == 200
+        assert res.json() == {"status": "done"}
+
+
+@pytest.mark.anyio
+async def test_resolve_action_item_not_found():
+    with patch("server.storage") as mock_storage:
+        mock_storage.resolve_action_item.return_value = False
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            res = await client.post("/action-items/bad-meeting/a-99/resolve")
+        assert res.status_code == 404

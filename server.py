@@ -147,3 +147,29 @@ def result(job_id: str):
         "meeting_id": job["meeting_id"],
         "ollama_available": job["ollama_available"],
     }
+
+
+@app.get("/meetings")
+def list_meetings():
+    return {"meetings": storage.list_meetings()}
+
+
+@app.get("/meetings/{meeting_id}")
+def get_meeting(meeting_id: str):
+    meeting = storage.load_meeting(meeting_id)
+    if meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    return meeting
+
+
+@app.get("/action-items/pending")
+def get_pending_action_items():
+    return {"items": storage.get_pending_action_items()}
+
+
+@app.post("/action-items/{meeting_id}/{item_id}/resolve")
+def resolve_action_item(meeting_id: str, item_id: str):
+    ok = storage.resolve_action_item(meeting_id, item_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return {"status": "done"}
