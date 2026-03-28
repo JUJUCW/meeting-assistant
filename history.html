@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>會議歷史紀錄</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Josefin+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+  <style>
+    /* ── Design Tokens ── */
+    :root {
+      --bg:          #0A0A0A;
+      --card-bg:     #141414;
+      --gold:        #D4AF37;
+      --gold-dim:    rgba(212,175,55,0.3);
+      --gold-glow:   0 0 15px rgba(212,175,55,0.2);
+      --gold-glow-strong: 0 0 22px rgba(212,175,55,0.45);
+      --cream:       #F2F0E4;
+      --muted:       #888888;
+      --font-display: 'Marcellus', serif;
+      --font-body:    'Josefin Sans', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-body);
+      background-color: var(--bg);
+      background-image:
+        repeating-linear-gradient( 45deg, rgba(212,175,55,0.03) 0, rgba(212,175,55,0.03) 1px, transparent 1px, transparent 10px),
+        repeating-linear-gradient(-45deg, rgba(212,175,55,0.03) 0, rgba(212,175,55,0.03) 1px, transparent 1px, transparent 10px);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 60px 16px;
+      color: var(--cream);
+    }
+
+    .container { width: 100%; max-width: 760px; }
+
+    /* ── Server Warning Banner ── */
+    #server-warning {
+      display: none;
+      background: rgba(180, 60, 60, 0.15);
+      border: 1px solid rgba(180, 60, 60, 0.5);
+      color: #e88;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 12px 18px;
+      margin-bottom: 28px;
+      text-align: center;
+    }
+
+    /* ── Header ── */
+    .header { text-align: center; margin-bottom: 52px; }
+
+    .header-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+    }
+
+    .header-back-link {
+      font-family: var(--font-body);
+      font-size: 12px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--gold);
+      text-decoration: none;
+      opacity: 0.8;
+      transition: opacity 0.2s;
+    }
+    .header-back-link:hover { opacity: 1; }
+
+    .header-eyebrow {
+      font-family: var(--font-body);
+      font-size: 12px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 14px;
+      opacity: 0.8;
+    }
+
+    h1 {
+      font-family: var(--font-display);
+      font-size: 38px;
+      font-weight: 400;
+      color: var(--cream);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      margin-bottom: 16px;
+    }
+
+    .header-divider {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .header-divider-line {
+      width: 52px;
+      height: 1px;
+      background: var(--gold-dim);
+    }
+    .header-divider-diamond {
+      width: 6px; height: 6px;
+      background: var(--gold);
+      transform: rotate(45deg);
+      flex-shrink: 0;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    /* ── Views ── */
+    #detail-view { display: none; }
+    #list-view   { display: block; }
+
+    /* ── Meeting List ── */
+    #meeting-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    #empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      border: 1px dashed var(--gold-dim);
+    }
+
+    /* ── Meeting Card ── */
+    .meeting-card {
+      background: var(--card-bg);
+      border: 1px solid var(--gold-dim);
+      padding: 24px 28px;
+      position: relative;
+      transition: border-color 0.25s, box-shadow 0.25s;
+    }
+    .meeting-card::before, .meeting-card::after {
+      content: '';
+      position: absolute;
+      width: 14px; height: 14px;
+      border-color: var(--gold);
+      border-style: solid;
+    }
+    .meeting-card::before { top: -1px; right: -1px; border-width: 2px 2px 0 0; }
+    .meeting-card::after  { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; }
+
+    .meeting-card:hover {
+      border-color: rgba(212,175,55,0.6);
+      box-shadow: var(--gold-glow);
+    }
+
+    .meeting-card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    .meeting-date {
+      font-family: var(--font-display);
+      font-size: 17px;
+      color: var(--cream);
+      letter-spacing: 0.08em;
+      cursor: pointer;
+    }
+    .meeting-date:hover { color: var(--gold); }
+
+    .meeting-card-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .badges {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      padding: 3px 9px;
+      border: 1px solid;
+    }
+    .badge-decisions {
+      border-color: rgba(212,175,55,0.4);
+      color: var(--gold);
+      background: rgba(212,175,55,0.07);
+    }
+    .badge-actions {
+      border-color: rgba(140,200,140,0.4);
+      color: #8cc88c;
+      background: rgba(140,200,140,0.07);
+    }
+    .badge-pending {
+      border-color: rgba(200,160,100,0.4);
+      color: #c8a064;
+      background: rgba(200,160,100,0.07);
+    }
+
+    /* ── Delete Inline Confirm ── */
+    .btn-delete {
+      font-family: var(--font-body);
+      font-size: 11px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #c87878;
+      background: transparent;
+      border: 1px solid rgba(200,120,120,0.35);
+      padding: 4px 12px;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .btn-delete:hover { border-color: #c87878; color: #e88; }
+
+    .delete-confirm {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(200,120,120,0.2);
+    }
+    .delete-confirm.visible { display: flex; }
+
+    .delete-confirm-text {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      color: #e88;
+      flex: 1;
+    }
+
+    .btn-confirm-delete {
+      font-family: var(--font-body);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      background: rgba(180,60,60,0.2);
+      border: 1px solid rgba(200,120,120,0.5);
+      color: #e88;
+      padding: 4px 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-confirm-delete:hover { background: rgba(180,60,60,0.35); }
+
+    .btn-cancel-delete {
+      font-family: var(--font-body);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      background: transparent;
+      border: 1px solid var(--gold-dim);
+      color: var(--muted);
+      padding: 4px 12px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .btn-cancel-delete:hover { border-color: var(--gold); color: var(--cream); }
+
+    /* ── Detail View ── */
+    #back-btn {
+      font-family: var(--font-body);
+      font-size: 12px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--gold);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      opacity: 0.8;
+      padding: 0;
+      margin-bottom: 28px;
+      transition: opacity 0.2s;
+    }
+    #back-btn:hover { opacity: 1; }
+
+    #detail-date {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 400;
+      color: var(--cream);
+      letter-spacing: 0.1em;
+      margin-bottom: 36px;
+      text-align: center;
+    }
+
+    .section-heading {
+      font-family: var(--font-display);
+      font-size: 14px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .section-heading::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--gold-dim);
+    }
+
+    .section { margin-bottom: 40px; }
+
+    /* ── Decision Item ── */
+    .decision-item {
+      background: var(--card-bg);
+      border: 1px solid rgba(212,175,55,0.15);
+      padding: 18px 22px;
+      margin-bottom: 12px;
+      position: relative;
+    }
+
+    .decision-display {}
+    .decision-content {
+      font-size: 14px;
+      letter-spacing: 0.06em;
+      color: var(--cream);
+      margin-bottom: 8px;
+      line-height: 1.7;
+    }
+    .decision-rationale {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+      line-height: 1.6;
+      margin-bottom: 6px;
+    }
+    .decision-people {
+      font-size: 11px;
+      color: rgba(212,175,55,0.6);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .item-actions {
+      margin-top: 12px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-edit {
+      font-family: var(--font-body);
+      font-size: 11px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--gold);
+      background: transparent;
+      border: 1px solid rgba(212,175,55,0.35);
+      padding: 4px 12px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .btn-edit:hover { border-color: var(--gold); }
+
+    /* ── Edit Form ── */
+    .edit-form {
+      display: none;
+      margin-top: 12px;
+      border-top: 1px solid var(--gold-dim);
+      padding-top: 16px;
+    }
+    .edit-form.visible { display: block; }
+
+    .form-group { margin-bottom: 14px; }
+
+    .form-label {
+      display: block;
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--gold);
+      opacity: 0.75;
+      margin-bottom: 6px;
+    }
+
+    .form-input, .form-textarea, .form-select {
+      width: 100%;
+      background: rgba(212,175,55,0.04);
+      border: 1px solid var(--gold-dim);
+      color: var(--cream);
+      font-family: var(--font-body);
+      font-size: 13px;
+      letter-spacing: 0.05em;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.2s;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .form-input:focus, .form-textarea:focus, .form-select:focus {
+      border-color: var(--gold);
+    }
+    .form-textarea { resize: vertical; min-height: 72px; }
+
+    .form-select option { background: #1a1a1a; }
+
+    .form-buttons {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-save {
+      font-family: var(--font-body);
+      font-size: 12px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      background: rgba(212,175,55,0.12);
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      padding: 7px 18px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-save:hover { background: rgba(212,175,55,0.22); }
+
+    .btn-cancel {
+      font-family: var(--font-body);
+      font-size: 12px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      background: transparent;
+      border: 1px solid var(--gold-dim);
+      color: var(--muted);
+      padding: 7px 18px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .btn-cancel:hover { border-color: var(--gold); color: var(--cream); }
+
+    /* ── Action Item ── */
+    .action-item {
+      background: var(--card-bg);
+      border: 1px solid rgba(212,175,55,0.15);
+      padding: 18px 22px;
+      margin-bottom: 12px;
+    }
+
+    .action-item-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .action-content {
+      font-size: 14px;
+      letter-spacing: 0.06em;
+      color: var(--cream);
+      line-height: 1.7;
+      flex: 1;
+    }
+
+    .action-meta {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .priority-badge {
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border: 1px solid;
+    }
+    .priority-high   { border-color: rgba(200,80,80,0.5);   color: #e07070; background: rgba(200,80,80,0.07); }
+    .priority-medium { border-color: rgba(200,160,60,0.5);  color: #c8a040; background: rgba(200,160,60,0.07); }
+    .priority-low    { border-color: rgba(100,160,100,0.5); color: #70b070; background: rgba(100,160,100,0.07); }
+
+    .status-badge {
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border: 1px solid;
+    }
+    .status-pending   { border-color: rgba(200,160,60,0.4);  color: #c8a040; background: rgba(200,160,60,0.06); }
+    .status-completed { border-color: rgba(100,180,100,0.4); color: #64b464; background: rgba(100,180,100,0.06); }
+
+    .action-assignee {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+    }
+    .action-deadline {
+      font-size: 12px;
+      color: rgba(212,175,55,0.6);
+      letter-spacing: 0.06em;
+    }
+
+    .btn-toggle-status {
+      font-family: var(--font-body);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      background: transparent;
+      border: 1px solid rgba(100,180,100,0.35);
+      color: #64b464;
+      padding: 4px 10px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: border-color 0.2s;
+    }
+    .btn-toggle-status:hover { border-color: #64b464; }
+    .btn-toggle-status.reopen {
+      border-color: rgba(200,160,60,0.35);
+      color: #c8a040;
+    }
+    .btn-toggle-status.reopen:hover { border-color: #c8a040; }
+
+    /* ── Loading / Error ── */
+    .loading-text {
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 40px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- Server Warning Banner -->
+    <div id="server-warning">
+      ⚠ 無法連線至後端伺服器 — 顯示的資料可能不完整
+    </div>
+
+    <!-- List View -->
+    <div id="list-view">
+      <div class="header">
+        <div class="header-nav">
+          <a href="index.html" class="header-back-link">← 返回首頁</a>
+          <div></div>
+        </div>
+        <div class="header-eyebrow">Archive</div>
+        <h1>會議歷史</h1>
+        <div class="header-divider">
+          <div class="header-divider-line"></div>
+          <div class="header-divider-diamond"></div>
+          <div class="header-divider-line"></div>
+        </div>
+        <div class="subtitle">Meeting Records</div>
+      </div>
+
+      <div id="meeting-list">
+        <div class="loading-text">載入中…</div>
+      </div>
+      <div id="empty-state" style="display:none;">
+        尚無會議紀錄
+      </div>
+    </div>
+
+    <!-- Detail View -->
+    <div id="detail-view">
+      <button id="back-btn">← 返回列表</button>
+      <div id="detail-date"></div>
+
+      <div class="section" id="decisions-section">
+        <div class="section-heading">決議事項</div>
+        <div id="decisions-list"></div>
+      </div>
+
+      <div class="section" id="actions-section">
+        <div class="section-heading">行動項目</div>
+        <div id="actions-list"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    'use strict';
+
+    const API = 'http://localhost:8000';
+
+    // ── Utilities ──────────────────────────────────────────────────────────────
+
+    function escapeHtml(str) {
+      if (str == null) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function priorityLabel(p) {
+      const map = { high: '高', medium: '中', low: '低' };
+      return map[p] || escapeHtml(p);
+    }
+
+    function statusLabel(s) {
+      return s === 'completed' ? '已完成' : '待處理';
+    }
+
+    // ── State ──────────────────────────────────────────────────────────────────
+
+    let allMeetings = [];
+    let currentMeeting = null;
+    let activeEditorCleanup = null;   // fn to close currently open editor
+
+    // ── Server reachability check ──────────────────────────────────────────────
+
+    async function checkServer() {
+      try {
+        const r = await fetch(`${API}/meetings`, { signal: AbortSignal.timeout(3000) });
+        if (!r.ok) throw new Error('bad status');
+        document.getElementById('server-warning').style.display = 'none';
+        return true;
+      } catch {
+        document.getElementById('server-warning').style.display = 'block';
+        return false;
+      }
+    }
+
+    // ── API helpers ────────────────────────────────────────────────────────────
+
+    async function fetchMeetings() {
+      const r = await fetch(`${API}/meetings`);
+      if (!r.ok) throw new Error('fetch meetings failed');
+      return r.json();
+    }
+
+    async function deleteMeeting(id) {
+      const r = await fetch(`${API}/meetings/${id}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error('delete failed');
+    }
+
+    async function patchDecision(meetingId, decisionId, body) {
+      const r = await fetch(`${API}/meetings/${meetingId}/decisions/${decisionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!r.ok) throw new Error('patch decision failed');
+      return r.json();
+    }
+
+    async function patchActionItem(meetingId, actionId, body) {
+      const r = await fetch(`${API}/meetings/${meetingId}/action_items/${actionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!r.ok) throw new Error('patch action_item failed');
+      return r.json();
+    }
+
+    // ── List View ──────────────────────────────────────────────────────────────
+
+    function renderList(meetings) {
+      const listEl   = document.getElementById('meeting-list');
+      const emptyEl  = document.getElementById('empty-state');
+
+      listEl.innerHTML = '';
+
+      if (!meetings.length) {
+        emptyEl.style.display = 'block';
+        return;
+      }
+      emptyEl.style.display = 'none';
+
+      meetings.forEach(m => {
+        const pendingCount = (m.action_items || []).filter(a => a.status !== 'completed').length;
+        const card = document.createElement('div');
+        card.className = 'meeting-card';
+        card.dataset.id = m.id;
+
+        card.innerHTML = `
+          <div class="meeting-card-top">
+            <div class="meeting-date" data-action="open-detail" data-id="${escapeHtml(m.id)}">${escapeHtml(m.date)}</div>
+            <div class="meeting-card-actions">
+              <button class="btn-delete" data-action="show-delete-confirm" data-id="${escapeHtml(m.id)}">刪除</button>
+            </div>
+          </div>
+          <div class="badges">
+            <span class="badge badge-decisions">${(m.decisions || []).length} 決議</span>
+            <span class="badge badge-actions">${(m.action_items || []).length} 行動項目</span>
+            ${pendingCount > 0 ? `<span class="badge badge-pending">${pendingCount} 待處理</span>` : ''}
+          </div>
+          <div class="delete-confirm" id="delete-confirm-${escapeHtml(m.id)}">
+            <span class="delete-confirm-text">確認刪除此會議？</span>
+            <button class="btn-confirm-delete" data-action="confirm-delete" data-id="${escapeHtml(m.id)}">確認</button>
+            <button class="btn-cancel-delete" data-action="cancel-delete" data-id="${escapeHtml(m.id)}">取消</button>
+          </div>
+        `;
+
+        listEl.appendChild(card);
+      });
+    }
+
+    function attachListEvents() {
+      const listEl = document.getElementById('meeting-list');
+      listEl.addEventListener('click', handleListClick);
+    }
+
+    function handleListClick(e) {
+      const action = e.target.dataset.action;
+      if (!action) return;
+
+      const id = e.target.dataset.id;
+
+      if (action === 'open-detail') {
+        const meeting = allMeetings.find(m => m.id === id);
+        if (meeting) openDetail(meeting);
+        return;
+      }
+
+      if (action === 'show-delete-confirm') {
+        const confirm = document.getElementById(`delete-confirm-${id}`);
+        if (confirm) confirm.classList.add('visible');
+        return;
+      }
+
+      if (action === 'cancel-delete') {
+        const confirm = document.getElementById(`delete-confirm-${id}`);
+        if (confirm) confirm.classList.remove('visible');
+        return;
+      }
+
+      if (action === 'confirm-delete') {
+        handleDelete(id);
+        return;
+      }
+    }
+
+    async function handleDelete(id) {
+      try {
+        await deleteMeeting(id);
+        allMeetings = allMeetings.filter(m => m.id !== id);
+        renderList(allMeetings);
+      } catch (err) {
+        console.error('Delete failed:', err);
+      }
+    }
+
+    // ── Detail View ────────────────────────────────────────────────────────────
+
+    function openDetail(meeting) {
+      currentMeeting = meeting;
+      activeEditorCleanup = null;
+
+      document.getElementById('list-view').style.display = 'none';
+      document.getElementById('detail-view').style.display = 'block';
+
+      document.getElementById('detail-date').textContent = meeting.date;
+
+      renderDecisions(meeting);
+      renderActionItems(meeting);
+    }
+
+    function closeDetail() {
+      currentMeeting = null;
+      activeEditorCleanup = null;
+      document.getElementById('detail-view').style.display = 'none';
+      document.getElementById('list-view').style.display = 'block';
+    }
+
+    // ── Decisions ──────────────────────────────────────────────────────────────
+
+    function renderDecisions(meeting) {
+      const container = document.getElementById('decisions-list');
+      container.innerHTML = '';
+
+      if (!meeting.decisions || !meeting.decisions.length) {
+        container.innerHTML = '<div class="loading-text" style="padding:20px 0">無決議事項</div>';
+        return;
+      }
+
+      meeting.decisions.forEach(d => {
+        const item = document.createElement('div');
+        item.className = 'decision-item';
+        item.dataset.decisionId = d.id;
+
+        item.innerHTML = `
+          <div class="decision-display">
+            <div class="decision-content">${escapeHtml(d.content)}</div>
+            ${d.rationale ? `<div class="decision-rationale">理由：${escapeHtml(d.rationale)}</div>` : ''}
+            ${d.related_people && d.related_people.length ? `<div class="decision-people">相關人員：${escapeHtml(d.related_people.join('、'))}</div>` : ''}
+            <div class="item-actions">
+              <button class="btn-edit" data-action="edit-decision" data-decision-id="${escapeHtml(String(d.id))}">編輯</button>
+            </div>
+          </div>
+          <div class="edit-form" id="decision-edit-${escapeHtml(String(d.id))}">
+            <div class="form-group">
+              <label class="form-label">決議內容</label>
+              <textarea class="form-textarea" data-field="content">${escapeHtml(d.content)}</textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">理由</label>
+              <textarea class="form-textarea" data-field="rationale">${escapeHtml(d.rationale || '')}</textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">相關人員（逗號分隔）</label>
+              <input class="form-input" type="text" data-field="related_people" value="${escapeHtml(d.related_people ? d.related_people.join(', ') : '')}">
+            </div>
+            <div class="form-buttons">
+              <button class="btn-save" data-action="save-decision" data-decision-id="${escapeHtml(String(d.id))}">儲存</button>
+              <button class="btn-cancel" data-action="cancel-decision" data-decision-id="${escapeHtml(String(d.id))}">取消</button>
+            </div>
+          </div>
+        `;
+        container.appendChild(item);
+      });
+
+      container.addEventListener('click', handleDecisionClick);
+    }
+
+    function handleDecisionClick(e) {
+      const action = e.target.dataset.action;
+      if (!action) return;
+
+      const decisionId = e.target.dataset.decisionId;
+
+      if (action === 'edit-decision') {
+        openDecisionEditor(decisionId);
+        return;
+      }
+      if (action === 'save-decision') {
+        saveDecision(decisionId);
+        return;
+      }
+      if (action === 'cancel-decision') {
+        closeDecisionEditor(decisionId);
+        return;
+      }
+    }
+
+    function openDecisionEditor(decisionId) {
+      // Close any currently open editor first
+      if (activeEditorCleanup) activeEditorCleanup();
+
+      const form = document.getElementById(`decision-edit-${decisionId}`);
+      if (form) {
+        form.classList.add('visible');
+        activeEditorCleanup = () => closeDecisionEditor(decisionId);
+      }
+    }
+
+    function closeDecisionEditor(decisionId) {
+      const form = document.getElementById(`decision-edit-${decisionId}`);
+      if (form) form.classList.remove('visible');
+      if (activeEditorCleanup) {
+        activeEditorCleanup = null;
+      }
+    }
+
+    async function saveDecision(decisionId) {
+      const form = document.getElementById(`decision-edit-${decisionId}`);
+      if (!form) return;
+
+      const content = form.querySelector('[data-field="content"]').value.trim();
+      const rationale = form.querySelector('[data-field="rationale"]').value.trim();
+      const relatedRaw = form.querySelector('[data-field="related_people"]').value;
+      const related_people = relatedRaw.split(',').map(s => s.trim()).filter(Boolean);
+
+      try {
+        const updated = await patchDecision(currentMeeting.id, decisionId, { content, rationale, related_people });
+        // Update local state
+        const d = currentMeeting.decisions.find(x => String(x.id) === String(decisionId));
+        if (d) {
+          d.content = updated.content;
+          d.rationale = updated.rationale;
+          d.related_people = updated.related_people;
+        }
+        renderDecisions(currentMeeting);
+      } catch (err) {
+        console.error('Save decision failed:', err);
+      }
+    }
+
+    // ── Action Items ───────────────────────────────────────────────────────────
+
+    function renderActionItems(meeting) {
+      const container = document.getElementById('actions-list');
+      container.innerHTML = '';
+
+      if (!meeting.action_items || !meeting.action_items.length) {
+        container.innerHTML = '<div class="loading-text" style="padding:20px 0">無行動項目</div>';
+        return;
+      }
+
+      meeting.action_items.forEach(a => {
+        const item = document.createElement('div');
+        item.className = 'action-item';
+        item.dataset.actionId = a.id;
+
+        const isCompleted = a.status === 'completed';
+        const toggleLabel = isCompleted ? '重新開啟' : '標記完成';
+        const toggleClass = isCompleted ? 'reopen' : '';
+
+        item.innerHTML = `
+          <div class="action-display">
+            <div class="action-item-header">
+              <div class="action-content">${escapeHtml(a.content)}</div>
+              <button class="btn-toggle-status ${escapeHtml(toggleClass)}"
+                data-action="toggle-status"
+                data-action-id="${escapeHtml(String(a.id))}">${escapeHtml(toggleLabel)}</button>
+            </div>
+            <div class="action-meta">
+              <span class="priority-badge priority-${escapeHtml(a.priority || 'medium')}">${priorityLabel(a.priority || 'medium')}</span>
+              <span class="status-badge status-${escapeHtml(a.status || 'pending')}">${statusLabel(a.status)}</span>
+            </div>
+            ${a.assignee ? `<div class="action-assignee">負責人：${escapeHtml(a.assignee)}</div>` : ''}
+            ${a.deadline ? `<div class="action-deadline">截止日期：${escapeHtml(a.deadline)}</div>` : ''}
+            <div class="item-actions">
+              <button class="btn-edit" data-action="edit-action" data-action-id="${escapeHtml(String(a.id))}">編輯</button>
+            </div>
+          </div>
+          <div class="edit-form" id="action-edit-${escapeHtml(String(a.id))}">
+            <div class="form-group">
+              <label class="form-label">行動內容</label>
+              <textarea class="form-textarea" data-field="content">${escapeHtml(a.content)}</textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">負責人</label>
+              <input class="form-input" type="text" data-field="assignee" value="${escapeHtml(a.assignee || '')}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">截止日期</label>
+              <input class="form-input" type="text" data-field="deadline" value="${escapeHtml(a.deadline || '')}" placeholder="YYYY-MM-DD">
+            </div>
+            <div class="form-group">
+              <label class="form-label">優先級</label>
+              <select class="form-select" data-field="priority">
+                <option value="high" ${a.priority === 'high' ? 'selected' : ''}>高</option>
+                <option value="medium" ${a.priority === 'medium' || !a.priority ? 'selected' : ''}>中</option>
+                <option value="low" ${a.priority === 'low' ? 'selected' : ''}>低</option>
+              </select>
+            </div>
+            <div class="form-buttons">
+              <button class="btn-save" data-action="save-action" data-action-id="${escapeHtml(String(a.id))}">儲存</button>
+              <button class="btn-cancel" data-action="cancel-action" data-action-id="${escapeHtml(String(a.id))}">取消</button>
+            </div>
+          </div>
+        `;
+        container.appendChild(item);
+      });
+
+      container.addEventListener('click', handleActionClick);
+    }
+
+    function handleActionClick(e) {
+      const action = e.target.dataset.action;
+      if (!action) return;
+
+      const actionId = e.target.dataset.actionId;
+
+      if (action === 'edit-action') {
+        openActionEditor(actionId);
+        return;
+      }
+      if (action === 'save-action') {
+        saveActionItem(actionId);
+        return;
+      }
+      if (action === 'cancel-action') {
+        closeActionEditor(actionId);
+        return;
+      }
+      if (action === 'toggle-status') {
+        toggleActionStatus(actionId);
+        return;
+      }
+    }
+
+    function openActionEditor(actionId) {
+      // Close any currently open editor first
+      if (activeEditorCleanup) activeEditorCleanup();
+
+      const form = document.getElementById(`action-edit-${actionId}`);
+      if (form) {
+        form.classList.add('visible');
+        activeEditorCleanup = () => closeActionEditor(actionId);
+      }
+    }
+
+    function closeActionEditor(actionId) {
+      const form = document.getElementById(`action-edit-${actionId}`);
+      if (form) form.classList.remove('visible');
+      if (activeEditorCleanup) {
+        activeEditorCleanup = null;
+      }
+    }
+
+    async function saveActionItem(actionId) {
+      const form = document.getElementById(`action-edit-${actionId}`);
+      if (!form) return;
+
+      const content  = form.querySelector('[data-field="content"]').value.trim();
+      const assignee = form.querySelector('[data-field="assignee"]').value.trim();
+      const deadline = form.querySelector('[data-field="deadline"]').value.trim();
+      const priority = form.querySelector('[data-field="priority"]').value;
+
+      try {
+        const updated = await patchActionItem(currentMeeting.id, actionId, { content, assignee, deadline, priority });
+        const a = currentMeeting.action_items.find(x => String(x.id) === String(actionId));
+        if (a) {
+          a.content  = updated.content;
+          a.assignee = updated.assignee;
+          a.deadline = updated.deadline;
+          a.priority = updated.priority;
+        }
+        renderActionItems(currentMeeting);
+      } catch (err) {
+        console.error('Save action item failed:', err);
+      }
+    }
+
+    async function toggleActionStatus(actionId) {
+      const a = currentMeeting.action_items.find(x => String(x.id) === String(actionId));
+      if (!a) return;
+
+      const newStatus = a.status === 'completed' ? 'pending' : 'completed';
+      try {
+        const updated = await patchActionItem(currentMeeting.id, actionId, { status: newStatus });
+        a.status = updated.status;
+        // Also update badge count in list
+        const listCard = document.querySelector(`.meeting-card[data-id="${escapeHtml(currentMeeting.id)}"]`);
+        if (listCard) {
+          // Refresh meeting card badges when returning
+          const idx = allMeetings.findIndex(m => m.id === currentMeeting.id);
+          if (idx >= 0) allMeetings[idx] = currentMeeting;
+        }
+        renderActionItems(currentMeeting);
+      } catch (err) {
+        console.error('Toggle status failed:', err);
+      }
+    }
+
+    // ── Init ───────────────────────────────────────────────────────────────────
+
+    async function init() {
+      // Wire up back button
+      document.getElementById('back-btn').addEventListener('click', closeDetail);
+
+      // Check server reachability
+      await checkServer();
+
+      // Load meetings
+      try {
+        const data = await fetchMeetings();
+        allMeetings = data.meetings || data;
+        renderList(allMeetings);
+        attachListEvents();
+      } catch (err) {
+        document.getElementById('server-warning').style.display = 'block';
+        document.getElementById('meeting-list').innerHTML = '';
+        document.getElementById('empty-state').style.display = 'block';
+        console.error('Init failed:', err);
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
