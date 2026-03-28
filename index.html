@@ -295,6 +295,10 @@
 
     async function loadResult() {
       const res = await fetch(`${API}/result/${jobId}`);
+      if (!res.ok) {
+        showTranscribeError('無法取得轉錄結果');
+        return;
+      }
       const data = await res.json();
       segments = data.segments;
       goToStep(3);
@@ -362,10 +366,15 @@
 
     async function copySummary() {
       const text = document.getElementById('summary-output').textContent;
-      await navigator.clipboard.writeText(text);
       const btn = document.getElementById('copyBtn');
-      btn.textContent = '已複製 ✓';
-      setTimeout(() => { btn.textContent = '複製摘要'; }, 2000);
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = '已複製 ✓';
+        setTimeout(() => { btn.textContent = '複製摘要'; }, 2000);
+      } catch {
+        btn.textContent = '複製失敗，請手動選取';
+        setTimeout(() => { btn.textContent = '複製摘要'; }, 3000);
+      }
     }
 
     function startOver() {
@@ -385,6 +394,10 @@
       document.getElementById('dot-1').classList.add('active');
       document.getElementById('panel-1').classList.add('active');
       currentStep = 1;
+      document.getElementById('spinner').textContent = '⏳';
+      document.getElementById('progress-status').textContent = '初始化中...';
+      document.getElementById('progress-error').style.display = 'none';
+      document.getElementById('retryBtn').style.display = 'none';
     }
   </script>
 </body>
