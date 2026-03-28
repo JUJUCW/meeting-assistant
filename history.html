@@ -575,6 +575,7 @@
       <div id="empty-state" style="display:none;">
         尚無會議紀錄
       </div>
+      <div id="list-error" style="display:none;color:#e88;font-size:13px;padding:12px 0;letter-spacing:0.04em;"></div>
     </div>
 
     <!-- Detail View -->
@@ -679,6 +680,7 @@
     function renderList(meetings) {
       const listEl   = document.getElementById('meeting-list');
       const emptyEl  = document.getElementById('empty-state');
+      document.getElementById('list-error').style.display = 'none';
 
       listEl.innerHTML = '';
 
@@ -782,7 +784,9 @@
       try {
         const r = await fetch(`${API}/meetings/${id}`);
         if (r.status === 404) {
-          alert('找不到此會議');
+          const errEl = document.getElementById('list-error');
+          errEl.textContent = '找不到此會議';
+          errEl.style.display = 'block';
           return;
         }
         if (!r.ok) throw new Error('fetch meeting failed');
@@ -800,7 +804,9 @@
         renderActionItems(meeting);
       } catch (err) {
         console.error('openDetail failed:', err);
-        alert('找不到此會議');
+        const errEl = document.getElementById('list-error');
+        errEl.textContent = '載入會議失敗，請再試一次。';
+        errEl.style.display = 'block';
       }
     }
 
