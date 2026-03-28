@@ -157,6 +157,81 @@
     .priority-medium { color: var(--cream); border-color: rgba(242,240,228,0.3); }
     .priority-low    { color: var(--muted); border-color: rgba(136,136,136,0.3); }
 
+    /* ── History Panel ── */
+    .history-panel {
+      margin-top: 36px;
+      border-top: 1px solid var(--gold-dim);
+      padding-top: 28px;
+    }
+    .history-panel-title {
+      font-family: var(--font-display);
+      font-size: 14px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .history-panel-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--gold-dim);
+    }
+    .history-item {
+      background: rgba(212,175,55,0.02);
+      border: 1px solid rgba(212,175,55,0.1);
+      padding: 14px 16px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+    .history-item-body { flex: 1; }
+    .history-item-content {
+      font-size: 13px;
+      color: var(--cream);
+      letter-spacing: 0.02em;
+      line-height: 1.6;
+      margin-bottom: 6px;
+    }
+    .history-item-meta {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .btn-resolve {
+      padding: 6px 12px;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border: 1px solid rgba(136,136,136,0.3);
+      background: transparent;
+      color: var(--muted);
+      font-family: var(--font-body);
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+    .btn-resolve:hover {
+      border-color: var(--gold);
+      color: var(--gold);
+    }
+    .history-empty {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      text-align: center;
+      padding: 20px 0;
+    }
+
     .segments-title {
       font-family: var(--font-display);
       font-size: 11px;
@@ -255,14 +330,24 @@
       </div>
     </div>
 
+    <!-- Step IV: Summary -->
     <div class="step-panel" id="panel-4">
       <div class="card">
-        <h2>會議摘要</h2>
-        <p>整理完成，可一鍵複製</p>
-        <div id="summary-output" style="white-space:pre-wrap;font-size:14px;color:#333;background:#f8f8fb;border-radius:10px;padding:16px;line-height:1.8;margin-bottom:16px;min-height:100px"></div>
-        <div style="display:flex;gap:8px">
+        <div class="card-title-row">
+          <span class="card-step-num" aria-hidden="true">IV</span>
+          <h2>會議摘要</h2>
+        </div>
+        <div class="card-divider" aria-hidden="true"></div>
+        <p>整理完成，可一鍵複製全文</p>
+        <div id="summary-output" aria-label="會議摘要內容"></div>
+        <div class="btn-row">
           <button class="btn btn-primary" id="copyBtn" onclick="copySummary()">複製摘要</button>
           <button class="btn btn-secondary" onclick="startOver()">重新開始</button>
+        </div>
+
+        <div class="history-panel">
+          <div class="history-panel-title">歷史待辦追蹤</div>
+          <div id="history-list"></div>
         </div>
       </div>
     </div>
@@ -569,23 +654,99 @@
     // --- Step 4: Summary ---
     function renderSummary() {
       const taggedDecisions = segments.filter(s => s.tag === 'decision');
-      const taggedActions = segments.filter(s => s.tag === 'action');
+      const taggedActions   = segments.filter(s => s.tag === 'action');
       const allText = segments.map(s => s.text).join('\n');
 
-      let output = '【會議記錄】\n';
-      output += allText + '\n';
+      let output = '【會議記錄】\n' + allText + '\n';
 
-      if (taggedDecisions.length > 0) {
+      if (decisions.length > 0) {
         output += '\n【決議事項】\n';
-        taggedDecisions.forEach((s, i) => { output += `${i+1}. ${s.text}\n`; });
+        decisions.forEach((d, i) => {
+          output += `${i + 1}. ${d.content}`;
+          if (d.rationale) output += `（${d.rationale}）`;
+          output += '\n';
+        });
+      } else if (taggedDecisions.length > 0) {
+        output += '\n【決議事項】\n';
+        taggedDecisions.forEach((s, i) => { output += `${i + 1}. ${s.text}\n`; });
       }
 
-      if (taggedActions.length > 0) {
+      if (actionItems.length > 0) {
         output += '\n【待辦事項】\n';
-        taggedActions.forEach((s, i) => { output += `${i+1}. ${s.text}\n`; });
+        actionItems.forEach((a, i) => {
+          output += `${i + 1}. ${a.content}`;
+          if (a.assignee) output += `（負責人：${a.assignee}）`;
+          if (a.deadline) output += `（截止：${a.deadline}）`;
+          output += '\n';
+        });
+      } else if (taggedActions.length > 0) {
+        output += '\n【待辦事項】\n';
+        taggedActions.forEach((s, i) => { output += `${i + 1}. ${s.text}\n`; });
       }
 
       document.getElementById('summary-output').textContent = output;
+      loadHistoryPanel();
+    }
+
+    async function loadHistoryPanel() {
+      const list = document.getElementById('history-list');
+      list.innerHTML = '<div class="history-empty">載入中...</div>';
+      try {
+        const res = await fetch(`${API}/action-items/pending`);
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        const items = data.items || [];
+        if (items.length === 0) {
+          list.innerHTML = '<div class="history-empty">目前無待處理事項</div>';
+          return;
+        }
+        list.innerHTML = items.map(item => `
+          <div class="history-item" id="history-item-${escapeHtml(item.meeting_id)}-${escapeHtml(item.id)}">
+            <div class="history-item-body">
+              <div class="history-item-content">${escapeHtml(item.content)}</div>
+              <div class="history-item-meta">
+                <span class="priority-badge priority-${escapeHtml(item.priority)}">${
+                  {'high':'高','medium':'中','low':'低'}[item.priority] || escapeHtml(item.priority)
+                }</span>
+                ${item.assignee ? `<span>負責人：${escapeHtml(item.assignee)}</span>` : ''}
+                ${item.deadline ? `<span>截止：${escapeHtml(item.deadline)}</span>` : ''}
+                <span>來源：${escapeHtml(item.meeting_date || item.meeting_id)}</span>
+              </div>
+            </div>
+            <button class="btn-resolve"
+              onclick="resolveHistoryItem('${escapeHtml(item.meeting_id)}','${escapeHtml(item.id)}', this)">
+              標記完成
+            </button>
+          </div>
+        `).join('');
+      } catch {
+        list.innerHTML = '<div class="history-empty">無法載入歷史待辦</div>';
+      }
+    }
+
+    async function resolveHistoryItem(meetingId, itemId, btn) {
+      btn.disabled = true;
+      btn.textContent = '處理中...';
+      try {
+        const res = await fetch(`${API}/action-items/${meetingId}/${itemId}/resolve`, {
+          method: 'POST',
+        });
+        if (res.ok) {
+          const row = document.getElementById(`history-item-${meetingId}-${itemId}`);
+          if (row) {
+            row.style.opacity = '0.4';
+            row.style.transition = 'opacity 0.4s';
+            btn.textContent = '已完成 ✓';
+            setTimeout(() => row.remove(), 1200);
+          }
+        } else {
+          btn.textContent = '失敗';
+          setTimeout(() => { btn.textContent = '標記完成'; btn.disabled = false; }, 2000);
+        }
+      } catch {
+        btn.textContent = '失敗';
+        setTimeout(() => { btn.textContent = '標記完成'; btn.disabled = false; }, 2000);
+      }
     }
 
     async function copySummary() {
