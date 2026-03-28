@@ -4,70 +4,302 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>會議助理</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Josefin+Sans:wght@300;400;600&display=swap" rel="stylesheet">
   <style>
+    /* ── Design Tokens ── */
+    :root {
+      --bg:          #0A0A0A;
+      --card-bg:     #141414;
+      --gold:        #D4AF37;
+      --gold-dim:    rgba(212,175,55,0.3);
+      --gold-glow:   0 0 15px rgba(212,175,55,0.2);
+      --gold-glow-strong: 0 0 22px rgba(212,175,55,0.45);
+      --cream:       #F2F0E4;
+      --muted:       #888888;
+      --font-display: 'Marcellus', serif;
+      --font-body:    'Josefin Sans', sans-serif;
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f0f2f5;
+      font-family: var(--font-body);
+      background-color: var(--bg);
+      background-image:
+        repeating-linear-gradient( 45deg, rgba(212,175,55,0.03) 0, rgba(212,175,55,0.03) 1px, transparent 1px, transparent 10px),
+        repeating-linear-gradient(-45deg, rgba(212,175,55,0.03) 0, rgba(212,175,55,0.03) 1px, transparent 1px, transparent 10px);
       min-height: 100vh;
       display: flex;
       justify-content: center;
-      padding: 48px 16px;
+      padding: 60px 16px;
+      color: var(--cream);
     }
-    .container { width: 100%; max-width: 600px; }
-    h1 { font-size: 26px; font-weight: 700; color: #1a1a2e; margin-bottom: 8px; }
-    .subtitle { font-size: 14px; color: #888; margin-bottom: 32px; }
 
+    .container { width: 100%; max-width: 600px; }
+
+    /* ── Header ── */
+    .header { text-align: center; margin-bottom: 52px; }
+
+    .header-eyebrow {
+      font-family: var(--font-body);
+      font-size: 12px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 14px;
+      opacity: 0.8;
+    }
+
+    h1 {
+      font-family: var(--font-display);
+      font-size: 38px;
+      font-weight: 400;
+      color: var(--cream);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      margin-bottom: 16px;
+    }
+
+    .header-divider {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .header-divider-line {
+      width: 52px;
+      height: 1px;
+      background: var(--gold-dim);
+    }
+    .header-divider-diamond {
+      width: 6px; height: 6px;
+      background: var(--gold);
+      transform: rotate(45deg);
+      flex-shrink: 0;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    /* ── Step Indicator ── */
     .steps {
       display: flex;
       align-items: center;
-      margin-bottom: 32px;
-      gap: 0;
+      margin-bottom: 44px;
     }
+
     .step-dot {
-      width: 32px; height: 32px;
-      border-radius: 50%;
-      background: #e0e0e0;
-      color: #aaa;
-      font-size: 13px; font-weight: 700;
-      display: flex; align-items: center; justify-content: center;
+      width: 42px; height: 42px;
       flex-shrink: 0;
+      background: var(--card-bg);
+      border: 1px solid rgba(212,175,55,0.18);
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+      transition: border-color 0.35s, box-shadow 0.35s;
     }
-    .step-dot.active { background: #6c63ff; color: #fff; }
-    .step-dot.done { background: #4caf50; color: #fff; }
-    .step-line { flex: 1; height: 2px; background: #e0e0e0; }
-    .step-line.done { background: #4caf50; }
+    .step-dot::before, .step-dot::after {
+      content: '';
+      position: absolute;
+      width: 9px; height: 9px;
+      border-color: rgba(212,175,55,0.18);
+      border-style: solid;
+      transition: border-color 0.35s;
+    }
+    .step-dot::before { top: -1px; left: -1px;   border-width: 2px 0 0 2px; }
+    .step-dot::after  { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
 
+    .step-dot span {
+      font-family: var(--font-display);
+      font-size: 12px;
+      color: rgba(212,175,55,0.25);
+      transition: color 0.35s;
+      letter-spacing: 0.04em;
+    }
+    .step-dot.active {
+      border-color: var(--gold);
+      box-shadow: var(--gold-glow);
+    }
+    .step-dot.active::before, .step-dot.active::after { border-color: var(--gold); }
+    .step-dot.active span { color: var(--gold); }
+    .step-dot.done { border-color: rgba(212,175,55,0.5); background: rgba(212,175,55,0.04); }
+    .step-dot.done::before, .step-dot.done::after { border-color: rgba(212,175,55,0.35); }
+    .step-dot.done span { color: rgba(212,175,55,0.5); }
+
+    .step-line {
+      flex: 1;
+      height: 1px;
+      background: rgba(212,175,55,0.12);
+      transition: background 0.35s;
+    }
+    .step-line.done { background: rgba(212,175,55,0.45); }
+
+    /* ── Card ── */
     .card {
-      background: #fff;
-      border-radius: 16px;
-      padding: 28px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+      background: var(--card-bg);
+      border: 1px solid var(--gold-dim);
+      padding: 36px;
+      position: relative;
     }
-    .card h2 { font-size: 18px; color: #1a1a2e; margin-bottom: 6px; }
-    .card p { font-size: 14px; color: #666; margin-bottom: 20px; }
-
-    .btn {
-      padding: 12px 24px;
-      border: none; border-radius: 10px;
-      font-size: 15px; cursor: pointer;
-      transition: background 0.2s;
+    .card::before, .card::after {
+      content: '';
+      position: absolute;
+      width: 18px; height: 18px;
+      border-color: var(--gold);
+      border-style: solid;
     }
-    .btn-primary { background: #6c63ff; color: #fff; }
-    .btn-primary:hover { background: #574fd6; }
-    .btn-primary:disabled { background: #c5c2f5; cursor: not-allowed; }
-    .btn-secondary { background: #f0f2f5; color: #555; }
-    .btn-secondary:hover { background: #e0e2e8; }
+    .card::before { top: -1px;    right: -1px;  border-width: 2px 2px 0 0; }
+    .card::after  { bottom: -1px; left: -1px;   border-width: 0 0 2px 2px; }
 
-    .error-msg { color: #e74c3c; font-size: 13px; margin-top: 8px; }
-
-    .step-panel { display: none; }
-    .step-panel.active { display: block; }
-
-    .record-row {
+    .card-title-row {
       display: flex;
-      gap: 8px;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 10px;
+    }
+    .card-step-num {
+      font-family: var(--font-display);
+      font-size: 11px;
+      color: var(--gold);
+      letter-spacing: 0.2em;
+      opacity: 0.65;
+    }
+    .card h2 {
+      font-family: var(--font-display);
+      font-size: 20px;
+      font-weight: 400;
+      color: var(--cream);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    .card-divider {
+      width: 36px;
+      height: 1px;
+      background: var(--gold-dim);
+      margin-bottom: 18px;
+    }
+    .card p {
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 32px;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 13px 28px;
+      border-radius: 0;
+      font-family: var(--font-body);
+      font-size: 13px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border: none;
+    }
+    .btn-primary {
+      background: transparent;
+      color: var(--gold);
+      border: 1px solid var(--gold);
+    }
+    .btn-primary:hover {
+      background: var(--gold);
+      color: #0A0A0A;
+      box-shadow: var(--gold-glow-strong);
+    }
+    .btn-primary:disabled {
+      background: transparent;
+      color: rgba(212,175,55,0.2);
+      border-color: rgba(212,175,55,0.2);
+      cursor: not-allowed;
+    }
+    .btn-secondary {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid rgba(136,136,136,0.3);
+    }
+    .btn-secondary:hover {
+      color: var(--cream);
+      border-color: rgba(242,240,228,0.4);
+    }
+    .btn-row { display: flex; gap: 12px; flex-wrap: wrap; }
+
+    /* ── Form Fields ── */
+    .field { margin-bottom: 28px; }
+    .field-label {
+      display: block;
+      font-size: 12px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 12px;
+      opacity: 0.75;
+    }
+
+    input[type="file"] {
+      width: 100%;
+      font-family: var(--font-body);
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid var(--gold-dim);
+      padding: 10px 0;
+      cursor: pointer;
+      transition: border-color 0.3s;
+    }
+    input[type="file"]:hover { border-bottom-color: rgba(212,175,55,0.6); }
+    input[type="file"]::file-selector-button {
+      background: transparent;
+      color: var(--gold);
+      border: 1px solid var(--gold-dim);
+      padding: 6px 14px;
+      font-family: var(--font-body);
+      font-size: 11px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      cursor: pointer;
+      margin-right: 14px;
+      transition: all 0.3s;
+      border-radius: 0;
+    }
+    input[type="file"]::file-selector-button:hover {
+      background: var(--gold);
+      color: #0A0A0A;
+      border-color: var(--gold);
+    }
+
+    .or-divider {
+      display: flex;
       align-items: center;
+      gap: 18px;
+      margin: 28px 0;
+      font-size: 12px;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: rgba(136,136,136,0.4);
+    }
+    .or-divider::before, .or-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: rgba(212,175,55,0.1);
+    }
+
+    .record-row { display: flex; gap: 14px; align-items: center; }
+
+    #recordStatus {
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gold);
     }
 
     /* ── Recording indicator ── */
@@ -89,6 +321,90 @@
       letter-spacing: 0.12em;
       color: #c0392b;
       min-width: 44px;
+    }
+
+    /* ── Step 2 Progress ── */
+    .progress-center { text-align: center; padding: 36px 0; }
+
+    .spinner-frame {
+      width: 68px; height: 68px;
+      border: 1px solid var(--gold-dim);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 24px;
+      position: relative;
+    }
+    .spinner-frame::before, .spinner-frame::after {
+      content: '';
+      position: absolute;
+      width: 12px; height: 12px;
+      border-color: var(--gold);
+      border-style: solid;
+    }
+    .spinner-frame::before { top: -1px;    left: -1px;   border-width: 2px 0 0 2px; }
+    .spinner-frame::after  { bottom: -1px; right: -1px;  border-width: 0 2px 2px 0; }
+
+    #spinner { font-size: 28px; line-height: 1; }
+
+    #progress-status {
+      font-family: var(--font-body);
+      font-size: 13px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* ── Segment Items ── */
+    .segment-item {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      background: rgba(212,175,55,0.02);
+      border: 1px solid rgba(212,175,55,0.08);
+      padding: 16px;
+      margin-bottom: 8px;
+      transition: border-color 0.2s;
+    }
+    .segment-item:hover { border-color: rgba(212,175,55,0.22); }
+
+    .segment-text {
+      flex: 1;
+      font-family: var(--font-body);
+      font-size: 13px;
+      color: var(--cream);
+      line-height: 1.75;
+      letter-spacing: 0.02em;
+    }
+    .segment-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+
+    .tag-btn {
+      padding: 6px 12px;
+      border-radius: 0;
+      font-family: var(--font-body);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border: 1px solid;
+      transition: all 0.2s;
+      background: transparent;
+    }
+    .tag-btn-decision {
+      border-color: rgba(212,175,55,0.4);
+      color: rgba(212,175,55,0.6);
+    }
+    .tag-btn-decision.active, .tag-btn-decision:hover {
+      background: var(--gold);
+      color: #0A0A0A;
+      border-color: var(--gold);
+    }
+    .tag-btn-action {
+      border-color: rgba(242,240,228,0.18);
+      color: rgba(242,240,228,0.35);
+    }
+    .tag-btn-action.active, .tag-btn-action:hover {
+      background: var(--cream);
+      color: #0A0A0A;
+      border-color: var(--cream);
     }
 
     /* ── AI Analysis Banners ── */
@@ -156,6 +472,31 @@
     .priority-high   { color: var(--gold);  border-color: rgba(212,175,55,0.5); }
     .priority-medium { color: var(--cream); border-color: rgba(242,240,228,0.3); }
     .priority-low    { color: var(--muted); border-color: rgba(136,136,136,0.3); }
+
+    .segments-title {
+      font-family: var(--font-display);
+      font-size: 11px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--muted);
+      opacity: 0.6;
+      margin: 24px 0 12px;
+    }
+
+    /* ── Summary Output ── */
+    #summary-output {
+      white-space: pre-wrap;
+      font-family: var(--font-body);
+      font-size: 13px;
+      letter-spacing: 0.03em;
+      line-height: 1.9;
+      color: var(--cream);
+      background: rgba(212,175,55,0.025);
+      border: 1px solid var(--gold-dim);
+      padding: 22px;
+      margin-bottom: 28px;
+      min-height: 120px;
+    }
 
     /* ── History Panel ── */
     .history-panel {
@@ -232,68 +573,104 @@
       padding: 20px 0;
     }
 
-    .segments-title {
-      font-family: var(--font-display);
-      font-size: 11px;
-      letter-spacing: 0.3em;
-      text-transform: uppercase;
-      color: var(--muted);
-      opacity: 0.6;
-      margin: 24px 0 12px;
+    /* ── Error & Code ── */
+    .error-msg {
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      color: #c0392b;
+      margin-top: 10px;
     }
+    code {
+      font-family: monospace;
+      font-size: 11px;
+      background: rgba(212,175,55,0.08);
+      padding: 2px 7px;
+      color: var(--gold);
+    }
+
+    .step-panel { display: none; }
+    .step-panel.active { display: block; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>會議助理</h1>
-    <p class="subtitle">語音轉文字 · 標記決議與待辦 · 一鍵輸出摘要</p>
 
-    <div class="steps">
-      <div class="step-dot active" id="dot-1">1</div>
-      <div class="step-line" id="line-1"></div>
-      <div class="step-dot" id="dot-2">2</div>
-      <div class="step-line" id="line-2"></div>
-      <div class="step-dot" id="dot-3">3</div>
-      <div class="step-line" id="line-3"></div>
-      <div class="step-dot" id="dot-4">4</div>
-    </div>
+    <!-- Header -->
+    <header class="header">
+      <p class="header-eyebrow">Meeting Intelligence</p>
+      <h1>會議助理</h1>
+      <div class="header-divider" aria-hidden="true">
+        <div class="header-divider-line"></div>
+        <div class="header-divider-diamond"></div>
+        <div class="header-divider-line"></div>
+      </div>
+      <p class="subtitle">語音轉文字 &nbsp;·&nbsp; 標記決議與待辦 &nbsp;·&nbsp; 一鍵輸出摘要</p>
+    </header>
 
+    <!-- Step Indicator -->
+    <nav class="steps" aria-label="步驟進度">
+      <div class="step-dot active" id="dot-1"><span>I</span></div>
+      <div class="step-line" id="line-1" aria-hidden="true"></div>
+      <div class="step-dot" id="dot-2"><span>II</span></div>
+      <div class="step-line" id="line-2" aria-hidden="true"></div>
+      <div class="step-dot" id="dot-3"><span>III</span></div>
+      <div class="step-line" id="line-3" aria-hidden="true"></div>
+      <div class="step-dot" id="dot-4"><span>IV</span></div>
+    </nav>
+
+    <!-- Step I: Audio Input -->
     <div class="step-panel active" id="panel-1">
       <div class="card">
-        <h2>上傳或錄製音訊</h2>
-        <p>選擇音檔（mp3、wav、m4a）或直接錄音</p>
-        <div id="server-error" class="error-msg" style="display:none">
-          ⚠️ 無法連線到本地伺服器，請先執行：<code>uvicorn server:app --reload</code>
+        <div class="card-title-row">
+          <span class="card-step-num" aria-hidden="true">I</span>
+          <h2>音訊輸入</h2>
         </div>
-        <div style="margin-bottom:16px">
-          <label style="font-size:14px;font-weight:600;display:block;margin-bottom:8px">上傳音檔</label>
-          <input type="file" id="fileInput" accept=".mp3,.wav,.m4a,.ogg,.flac,.webm" style="font-size:14px;width:100%">
-          <div id="file-error" class="error-msg" style="display:none"></div>
+        <div class="card-divider" aria-hidden="true"></div>
+        <p>上傳音檔或即時錄音以開始轉錄</p>
+
+        <div id="server-error" class="error-msg" style="display:none;margin-bottom:20px" role="alert">
+          ⚠ 無法連線到本地伺服器，請先執行：<code>uvicorn server:app --reload</code>
         </div>
-        <div style="text-align:center;color:#bbb;margin:16px 0;font-size:13px">— 或 —</div>
-        <div style="margin-bottom:24px">
-          <label style="font-size:14px;font-weight:600;display:block;margin-bottom:8px">即時錄音</label>
+
+        <div class="field">
+          <label class="field-label" for="fileInput">上傳音檔</label>
+          <input type="file" id="fileInput" accept=".mp3,.wav,.m4a,.ogg,.flac,.webm">
+          <div id="file-error" class="error-msg" style="display:none" role="alert"></div>
+        </div>
+
+        <div class="or-divider" aria-hidden="true">或</div>
+
+        <div class="field">
+          <label class="field-label">即時錄音</label>
           <div class="record-row">
             <button class="btn btn-secondary" id="recordBtn" onclick="toggleRecord()">● 開始錄音</button>
             <div class="rec-dot" id="recDot" style="display:none"></div>
             <span class="rec-timer" id="recTimer" style="display:none">00:00</span>
             <span id="recordStatus" aria-live="polite"></span>
           </div>
-          <div id="record-error" class="error-msg" style="display:none"></div>
+          <div id="record-error" class="error-msg" style="display:none" role="alert"></div>
         </div>
+
         <button class="btn btn-primary" id="submitBtn" onclick="submitAudio()" disabled>送出轉錄</button>
       </div>
     </div>
 
+    <!-- Step II: Transcribing -->
     <div class="step-panel" id="panel-2">
       <div class="card">
-        <h2>轉錄中...</h2>
-        <p>正在使用本地 Whisper 模型處理音訊，請稍候</p>
-        <div style="text-align:center;padding:24px 0">
-          <div id="spinner" style="font-size:32px;margin-bottom:16px">⏳</div>
-          <div id="progress-status" style="font-size:15px;color:#555">初始化中...</div>
-          <div id="progress-error" class="error-msg" style="margin-top:12px;display:none"></div>
-          <button class="btn btn-secondary" id="retryBtn" style="margin-top:16px;display:none" onclick="retryTranscription()">重試</button>
+        <div class="card-title-row">
+          <span class="card-step-num" aria-hidden="true">II</span>
+          <h2>語音轉錄</h2>
+        </div>
+        <div class="card-divider" aria-hidden="true"></div>
+        <p>本地 Whisper 模型處理中，請稍候</p>
+        <div class="progress-center">
+          <div class="spinner-frame" aria-hidden="true">
+            <div id="spinner">⏳</div>
+          </div>
+          <div id="progress-status" aria-live="polite">初始化中...</div>
+          <div id="progress-error" class="error-msg" style="margin-top:18px;display:none" role="alert"></div>
+          <button class="btn btn-secondary" id="retryBtn" style="margin-top:22px;display:none" onclick="retryTranscription()">重試</button>
         </div>
       </div>
     </div>
@@ -351,6 +728,7 @@
         </div>
       </div>
     </div>
+
   </div>
 
   <script>
@@ -446,7 +824,6 @@
         mediaRecorder.start();
         btn.textContent = '■ 停止錄音';
 
-        // Start visual feedback
         recSeconds = 0;
         recDot.style.display = 'inline-block';
         recTimer.style.display = 'inline-block';
@@ -529,6 +906,7 @@
       document.getElementById('progress-error').style.display = 'none';
       document.getElementById('retryBtn').style.display = 'none';
       document.getElementById('spinner').textContent = '⏳';
+      document.getElementById('progress-status').textContent = '初始化中...';
     }
 
     async function loadResult() {
@@ -555,20 +933,14 @@
       list.innerHTML = '';
       segments.forEach(seg => {
         const div = document.createElement('div');
-        div.style.cssText = 'display:flex;gap:10px;align-items:flex-start;background:#f8f8fb;border-radius:10px;padding:12px';
+        div.className = 'segment-item';
         div.innerHTML = `
-          <span style="flex:1;font-size:14px;color:#333;line-height:1.6">${escapeHtml(seg.text)}</span>
-          <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
-            <button onclick="setTag(${seg.id},'decision')" style="
-              padding:3px 10px;border-radius:6px;border:1.5px solid #6c63ff;
-              background:${seg.tag==='decision'?'#6c63ff':'#fff'};
-              color:${seg.tag==='decision'?'#fff':'#6c63ff'};
-              font-size:12px;cursor:pointer">決議</button>
-            <button onclick="setTag(${seg.id},'action')" style="
-              padding:3px 10px;border-radius:6px;border:1.5px solid #ff6584;
-              background:${seg.tag==='action'?'#ff6584':'#fff'};
-              color:${seg.tag==='action'?'#fff':'#ff6584'};
-              font-size:12px;cursor:pointer">待辦</button>
+          <span class="segment-text">${escapeHtml(seg.text)}</span>
+          <div class="segment-actions">
+            <button class="tag-btn tag-btn-decision${seg.tag === 'decision' ? ' active' : ''}"
+              onclick="setTag(${seg.id}, 'decision')">決議</button>
+            <button class="tag-btn tag-btn-action${seg.tag === 'action' ? ' active' : ''}"
+              onclick="setTag(${seg.id}, 'action')">待辦</button>
           </div>
         `;
         list.appendChild(div);
