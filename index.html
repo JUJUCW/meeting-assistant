@@ -63,6 +63,109 @@
 
     .step-panel { display: none; }
     .step-panel.active { display: block; }
+
+    .record-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    /* ── Recording indicator ── */
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.3; transform: scale(0.7); }
+    }
+    .rec-dot {
+      display: inline-block;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #c0392b;
+      animation: pulse-dot 1s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+    .rec-timer {
+      font-family: var(--font-body);
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      color: #c0392b;
+      min-width: 44px;
+    }
+
+    /* ── AI Analysis Banners ── */
+    .banner {
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .banner-warn {
+      border: 1px solid rgba(192,57,43,0.4);
+      background: rgba(192,57,43,0.06);
+      color: #e67e6e;
+    }
+    .banner-success {
+      border: 1px solid rgba(212,175,55,0.4);
+      background: rgba(212,175,55,0.06);
+      color: var(--gold);
+    }
+
+    /* ── Analysis Cards ── */
+    .analysis-section-title {
+      font-family: var(--font-display);
+      font-size: 11px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--gold);
+      opacity: 0.7;
+      margin: 24px 0 12px;
+    }
+    .analysis-card {
+      background: rgba(212,175,55,0.03);
+      border: 1px solid rgba(212,175,55,0.12);
+      padding: 16px;
+      margin-bottom: 10px;
+    }
+    .analysis-card-content {
+      font-size: 13px;
+      color: var(--cream);
+      letter-spacing: 0.03em;
+      line-height: 1.65;
+      margin-bottom: 8px;
+    }
+    .analysis-card-meta {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .priority-badge {
+      padding: 2px 8px;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      border: 1px solid;
+    }
+    .priority-high   { color: var(--gold);  border-color: rgba(212,175,55,0.5); }
+    .priority-medium { color: var(--cream); border-color: rgba(242,240,228,0.3); }
+    .priority-low    { color: var(--muted); border-color: rgba(136,136,136,0.3); }
+
+    .segments-title {
+      font-family: var(--font-display);
+      font-size: 11px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--muted);
+      opacity: 0.6;
+      margin: 24px 0 12px;
+    }
   </style>
 </head>
 <body>
@@ -95,9 +198,11 @@
         <div style="text-align:center;color:#bbb;margin:16px 0;font-size:13px">— 或 —</div>
         <div style="margin-bottom:24px">
           <label style="font-size:14px;font-weight:600;display:block;margin-bottom:8px">即時錄音</label>
-          <div style="display:flex;gap:8px;align-items:center">
+          <div class="record-row">
             <button class="btn btn-secondary" id="recordBtn" onclick="toggleRecord()">● 開始錄音</button>
-            <span id="recordStatus" style="font-size:13px;color:#888"></span>
+            <div class="rec-dot" id="recDot" style="display:none"></div>
+            <span class="rec-timer" id="recTimer" style="display:none">00:00</span>
+            <span id="recordStatus" aria-live="polite"></span>
           </div>
           <div id="record-error" class="error-msg" style="display:none"></div>
         </div>
@@ -118,11 +223,34 @@
       </div>
     </div>
 
+    <!-- Step III: AI Analysis + Review -->
     <div class="step-panel" id="panel-3">
       <div class="card">
-        <h2>標記逐字稿</h2>
-        <p>點擊每段文字旁的按鈕，標記為「決議」或「待辦」</p>
-        <div id="segments-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:24px"></div>
+        <div class="card-title-row">
+          <span class="card-step-num" aria-hidden="true">III</span>
+          <h2>分析結果</h2>
+        </div>
+        <div class="card-divider" aria-hidden="true"></div>
+        <p>AI 自動提取決議與待辦，可手動調整標記</p>
+
+        <div id="ollama-warn" class="banner banner-warn" style="display:none">
+          <span>⚠ Ollama 未運行，請先執行 <code>ollama serve</code></span>
+          <button class="btn btn-secondary" style="font-size:11px;padding:8px 14px" onclick="reanalyze()">重新分析</button>
+        </div>
+        <div id="resolved-banner" class="banner banner-success" style="display:none"></div>
+
+        <div id="decisions-section" style="display:none">
+          <div class="analysis-section-title">決議事項</div>
+          <div id="decisions-list"></div>
+        </div>
+
+        <div id="action-items-section" style="display:none">
+          <div class="analysis-section-title">待辦事項</div>
+          <div id="action-items-list"></div>
+        </div>
+
+        <div class="segments-title">逐字稿</div>
+        <div id="segments-list" style="margin-bottom:28px"></div>
         <button class="btn btn-primary" onclick="goToStep(4); renderSummary()">產生摘要</button>
       </div>
     </div>
@@ -145,6 +273,11 @@
     let currentStep = 1;
     let jobId = null;
     let segments = [];
+    let decisions = [];
+    let actionItems = [];
+    let resolvedItemIds = [];
+    let ollamaAvailable = true;
+    let currentMeetingId = null;
     const API = 'http://localhost:8000';
 
     // --- Step navigation ---
@@ -190,16 +323,25 @@
       document.getElementById('submitBtn').disabled = !hasAudio;
     }
 
+    let recInterval = null;
+    let recSeconds = 0;
+
     async function toggleRecord() {
       const btn = document.getElementById('recordBtn');
       const status = document.getElementById('recordStatus');
       const errEl = document.getElementById('record-error');
+      const recDot = document.getElementById('recDot');
+      const recTimer = document.getElementById('recTimer');
       errEl.style.display = 'none';
 
       if (mediaRecorder && mediaRecorder.state === 'recording') {
         mediaRecorder.stop();
         btn.textContent = '● 開始錄音';
-        status.textContent = '';
+        btn.classList.remove('btn-recording');
+        recDot.style.display = 'none';
+        recTimer.style.display = 'none';
+        clearInterval(recInterval);
+        recInterval = null;
         return;
       }
 
@@ -218,7 +360,18 @@
         };
         mediaRecorder.start();
         btn.textContent = '■ 停止錄音';
-        status.textContent = '錄音中...';
+
+        // Start visual feedback
+        recSeconds = 0;
+        recDot.style.display = 'inline-block';
+        recTimer.style.display = 'inline-block';
+        recTimer.textContent = '00:00';
+        recInterval = setInterval(() => {
+          recSeconds++;
+          const m = String(Math.floor(recSeconds / 60)).padStart(2, '0');
+          const s = String(recSeconds % 60).padStart(2, '0');
+          recTimer.textContent = `${m}:${s}`;
+        }, 1000);
       } catch {
         errEl.textContent = '無法存取麥克風，請確認瀏覽器已授予麥克風權限。';
         errEl.style.display = 'block';
@@ -301,7 +454,13 @@
       }
       const data = await res.json();
       segments = data.segments;
+      decisions = data.decisions || [];
+      actionItems = data.action_items || [];
+      resolvedItemIds = data.resolved_item_ids || [];
+      ollamaAvailable = data.ollama_available !== false;
+      currentMeetingId = data.meeting_id || null;
       goToStep(3);
+      renderAnalysis();
       renderSegments();
     }
 
@@ -342,6 +501,71 @@
       return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
 
+    function renderAnalysis() {
+      document.getElementById('ollama-warn').style.display =
+        ollamaAvailable ? 'none' : 'flex';
+
+      const resolvedBanner = document.getElementById('resolved-banner');
+      if (resolvedItemIds.length > 0) {
+        resolvedBanner.textContent = `✓ ${resolvedItemIds.length} 項待辦已在本次會議中完成`;
+        resolvedBanner.style.display = 'flex';
+      } else {
+        resolvedBanner.style.display = 'none';
+      }
+
+      const decisionsSection = document.getElementById('decisions-section');
+      const decisionsList = document.getElementById('decisions-list');
+      if (decisions.length > 0) {
+        decisionsSection.style.display = 'block';
+        decisionsList.innerHTML = decisions.map(d => `
+          <div class="analysis-card">
+            <div class="analysis-card-content">${escapeHtml(d.content)}</div>
+            <div class="analysis-card-meta">
+              ${d.rationale ? `<span>理由：${escapeHtml(d.rationale)}</span>` : ''}
+              ${d.related_people && d.related_people.length > 0
+                ? `<span>相關人員：${d.related_people.map(escapeHtml).join('、')}</span>`
+                : ''}
+            </div>
+          </div>
+        `).join('');
+      } else {
+        decisionsSection.style.display = 'none';
+      }
+
+      const actionItemsSection = document.getElementById('action-items-section');
+      const actionItemsList = document.getElementById('action-items-list');
+      if (actionItems.length > 0) {
+        actionItemsSection.style.display = 'block';
+        actionItemsList.innerHTML = actionItems.map(a => `
+          <div class="analysis-card">
+            <div class="analysis-card-content">${escapeHtml(a.content)}</div>
+            <div class="analysis-card-meta">
+              <span class="priority-badge priority-${escapeHtml(a.priority)}">${
+                {'high':'高','medium':'中','low':'低'}[a.priority] || escapeHtml(a.priority)
+              }</span>
+              ${a.assignee ? `<span>負責人：${escapeHtml(a.assignee)}</span>` : ''}
+              ${a.deadline ? `<span>截止：${escapeHtml(a.deadline)}</span>` : ''}
+            </div>
+          </div>
+        `).join('');
+      } else {
+        actionItemsSection.style.display = 'none';
+      }
+    }
+
+    async function reanalyze() {
+      if (!jobId) return;
+      const res = await fetch(`${API}/result/${jobId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      decisions = data.decisions || [];
+      actionItems = data.action_items || [];
+      resolvedItemIds = data.resolved_item_ids || [];
+      ollamaAvailable = data.ollama_available !== false;
+      renderAnalysis();
+      renderSegments();
+    }
+
     // --- Step 4: Summary ---
     function renderSummary() {
       const decisions = segments.filter(s => s.tag === 'decision');
@@ -380,10 +604,23 @@
     function startOver() {
       jobId = null;
       segments = [];
+      decisions = [];
+      actionItems = [];
+      resolvedItemIds = [];
+      ollamaAvailable = true;
+      currentMeetingId = null;
+      document.getElementById('ollama-warn').style.display = 'none';
+      document.getElementById('resolved-banner').style.display = 'none';
+      document.getElementById('decisions-section').style.display = 'none';
+      document.getElementById('action-items-section').style.display = 'none';
       selectedFile = null;
       recordedBlob = null;
       document.getElementById('fileInput').value = '';
       document.getElementById('recordStatus').textContent = '';
+      document.getElementById('recDot').style.display = 'none';
+      document.getElementById('recTimer').style.display = 'none';
+      if (recInterval) { clearInterval(recInterval); recInterval = null; }
+      recSeconds = 0;
       document.getElementById('submitBtn').disabled = true;
 
       for (let i = 1; i <= 4; i++) {
