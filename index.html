@@ -568,21 +568,21 @@
 
     // --- Step 4: Summary ---
     function renderSummary() {
-      const decisions = segments.filter(s => s.tag === 'decision');
-      const actions = segments.filter(s => s.tag === 'action');
+      const taggedDecisions = segments.filter(s => s.tag === 'decision');
+      const taggedActions = segments.filter(s => s.tag === 'action');
       const allText = segments.map(s => s.text).join('\n');
 
       let output = '【會議記錄】\n';
       output += allText + '\n';
 
-      if (decisions.length > 0) {
+      if (taggedDecisions.length > 0) {
         output += '\n【決議事項】\n';
-        decisions.forEach((s, i) => { output += `${i+1}. ${s.text}\n`; });
+        taggedDecisions.forEach((s, i) => { output += `${i+1}. ${s.text}\n`; });
       }
 
-      if (actions.length > 0) {
+      if (taggedActions.length > 0) {
         output += '\n【待辦事項】\n';
-        actions.forEach((s, i) => { output += `${i+1}. ${s.text}\n`; });
+        taggedActions.forEach((s, i) => { output += `${i+1}. ${s.text}\n`; });
       }
 
       document.getElementById('summary-output').textContent = output;
