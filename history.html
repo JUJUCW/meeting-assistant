@@ -688,7 +688,7 @@
       }
       emptyEl.style.display = 'none';
 
-      meetings.forEach(m => {
+      [...meetings].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')).forEach(m => {
         const pendingCount = (m.action_items || []).filter(a => a.status !== 'completed').length;
         const card = document.createElement('div');
         card.className = 'meeting-card';
@@ -698,6 +698,7 @@
           <div class="meeting-card-top">
             <div class="meeting-date" data-action="open-detail" data-id="${escapeHtml(m.id)}">${escapeHtml(m.date)}</div>
             <div class="meeting-card-actions">
+              <button class="btn-edit" data-action="open-detail" data-id="${escapeHtml(m.id)}">查看</button>
               <button class="btn-delete" data-action="show-delete-confirm" data-id="${escapeHtml(m.id)}">刪除</button>
             </div>
           </div>
@@ -729,8 +730,7 @@
       const id = e.target.dataset.id;
 
       if (action === 'open-detail') {
-        const meeting = allMeetings.find(m => m.id === id);
-        if (meeting) openDetail(meeting);
+        openDetail(id);
         return;
       }
 
@@ -759,22 +759,49 @@
         renderList(allMeetings);
       } catch (err) {
         console.error('Delete failed:', err);
+        const confirmEl = document.getElementById(`delete-confirm-${id}`);
+        if (confirmEl) {
+          let errMsg = confirmEl.querySelector('.delete-error-msg');
+          if (!errMsg) {
+            errMsg = document.createElement('span');
+            errMsg.className = 'delete-error-msg';
+            errMsg.style.cssText = 'font-size:12px;color:#e88;letter-spacing:0.06em;flex-basis:100%;';
+            confirmEl.appendChild(errMsg);
+          }
+          errMsg.textContent = '刪除失敗，請再試一次。';
+        }
       }
     }
 
     // ── Detail View ────────────────────────────────────────────────────────────
 
-    function openDetail(meeting) {
-      currentMeeting = meeting;
-      activeEditorCleanup = null;
+    async function openDetail(meetingId) {
+      // meetingId may be passed as an id string or a meeting object (legacy call)
+      const id = (typeof meetingId === 'object' && meetingId !== null) ? meetingId.id : meetingId;
 
-      document.getElementById('list-view').style.display = 'none';
-      document.getElementById('detail-view').style.display = 'block';
+      try {
+        const r = await fetch(`${API}/meetings/${id}`);
+        if (r.status === 404) {
+          alert('找不到此會議');
+          return;
+        }
+        if (!r.ok) throw new Error('fetch meeting failed');
+        const meeting = await r.json();
 
-      document.getElementById('detail-date').textContent = meeting.date;
+        currentMeeting = meeting;
+        activeEditorCleanup = null;
 
-      renderDecisions(meeting);
-      renderActionItems(meeting);
+        document.getElementById('list-view').style.display = 'none';
+        document.getElementById('detail-view').style.display = 'block';
+
+        document.getElementById('detail-date').textContent = meeting.date;
+
+        renderDecisions(meeting);
+        renderActionItems(meeting);
+      } catch (err) {
+        console.error('openDetail failed:', err);
+        alert('找不到此會議');
+      }
     }
 
     function closeDetail() {
@@ -826,6 +853,7 @@
               <button class="btn-save" data-action="save-decision" data-decision-id="${escapeHtml(String(d.id))}">儲存</button>
               <button class="btn-cancel" data-action="cancel-decision" data-decision-id="${escapeHtml(String(d.id))}">取消</button>
             </div>
+            <div class="form-error" style="display:none;color:#e88;font-size:12px;letter-spacing:0.06em;margin-top:8px;"></div>
           </div>
         `;
         container.appendChild(item);
@@ -894,6 +922,11 @@
         renderDecisions(currentMeeting);
       } catch (err) {
         console.error('Save decision failed:', err);
+        const errEl = form.querySelector('.form-error');
+        if (errEl) {
+          errEl.textContent = '儲存失敗，請再試一次。';
+          errEl.style.display = 'block';
+        }
       }
     }
 
@@ -946,7 +979,7 @@
             </div>
             <div class="form-group">
               <label class="form-label">截止日期</label>
-              <input class="form-input" type="text" data-field="deadline" value="${escapeHtml(a.deadline || '')}" placeholder="YYYY-MM-DD">
+              <input class="form-input" type="date" data-field="deadline" value="${escapeHtml(a.deadline || '')}">
             </div>
             <div class="form-group">
               <label class="form-label">優先級</label>
@@ -960,6 +993,7 @@
               <button class="btn-save" data-action="save-action" data-action-id="${escapeHtml(String(a.id))}">儲存</button>
               <button class="btn-cancel" data-action="cancel-action" data-action-id="${escapeHtml(String(a.id))}">取消</button>
             </div>
+            <div class="form-error" style="display:none;color:#e88;font-size:12px;letter-spacing:0.06em;margin-top:8px;"></div>
           </div>
         `;
         container.appendChild(item);
@@ -1032,6 +1066,11 @@
         renderActionItems(currentMeeting);
       } catch (err) {
         console.error('Save action item failed:', err);
+        const errEl = form.querySelector('.form-error');
+        if (errEl) {
+          errEl.textContent = '儲存失敗，請再試一次。';
+          errEl.style.display = 'block';
+        }
       }
     }
 
