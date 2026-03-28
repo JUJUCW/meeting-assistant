@@ -500,7 +500,7 @@
       border: 1px solid;
     }
     .status-pending   { border-color: rgba(200,160,60,0.4);  color: #c8a040; background: rgba(200,160,60,0.06); }
-    .status-completed { border-color: rgba(100,180,100,0.4); color: #64b464; background: rgba(100,180,100,0.06); }
+    .status-done      { border-color: rgba(100,180,100,0.4); color: #64b464; background: rgba(100,180,100,0.06); }
 
     .action-assignee {
       font-size: 12px;
@@ -619,7 +619,7 @@
     }
 
     function statusLabel(s) {
-      if (s === 'completed') return '已完成';
+      if (s === 'done') return '已完成';
       if (s === 'pending') return '待處理';
       return escapeHtml(s); // safe fallback
     }
@@ -668,7 +668,7 @@
     }
 
     async function patchActionItem(meetingId, actionId, body) {
-      const r = await fetch(`${API}/meetings/${meetingId}/action_items/${actionId}`, {
+      const r = await fetch(`${API}/meetings/${meetingId}/action-items/${actionId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -693,22 +693,22 @@
       emptyEl.style.display = 'none';
 
       [...meetings].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')).forEach(m => {
-        const pendingCount = (m.action_items || []).filter(a => a.status !== 'completed').length;
+        const pendingCount = m.pending_action_item_count || 0;
         const card = document.createElement('div');
         card.className = 'meeting-card';
         card.dataset.id = m.id;
 
         card.innerHTML = `
           <div class="meeting-card-top">
-            <div class="meeting-date" data-action="open-detail" data-id="${escapeHtml(m.id)}">${escapeHtml(m.date)}</div>
+            <div class="meeting-date" data-action="open-detail" data-id="${escapeHtml(m.id)}">${escapeHtml((m.created_at || '').replace('T', ' ').slice(0, 16))}</div>
             <div class="meeting-card-actions">
               <button class="btn-edit" data-action="open-detail" data-id="${escapeHtml(m.id)}">查看</button>
               <button class="btn-delete" data-action="show-delete-confirm" data-id="${escapeHtml(m.id)}">刪除</button>
             </div>
           </div>
           <div class="badges">
-            <span class="badge badge-decisions">${(m.decisions || []).length} 決議</span>
-            <span class="badge badge-actions">${(m.action_items || []).length} 行動項目</span>
+            <span class="badge badge-decisions">${m.decision_count || 0} 決議</span>
+            <span class="badge badge-actions">${m.action_item_count || 0} 行動項目</span>
             ${pendingCount > 0 ? `<span class="badge badge-pending">${pendingCount} 待處理</span>` : ''}
           </div>
           <div class="delete-confirm" id="delete-confirm-${escapeHtml(m.id)}">
@@ -954,7 +954,7 @@
         item.className = 'action-item';
         item.dataset.actionId = a.id;
 
-        const isCompleted = a.status === 'completed';
+        const isCompleted = a.status === 'done';
         const toggleLabel = isCompleted ? '重新開啟' : '標記完成';
         const toggleClass = isCompleted ? 'reopen' : '';
 
@@ -1087,7 +1087,7 @@
       const a = currentMeeting.action_items.find(x => String(x.id) === String(actionId));
       if (!a) return;
 
-      const newStatus = a.status === 'completed' ? 'pending' : 'completed';
+      const newStatus = a.status === 'done' ? 'pending' : 'done';
       try {
         const updated = await patchActionItem(currentMeeting.id, actionId, { status: newStatus });
         a.status = updated.status;
