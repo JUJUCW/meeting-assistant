@@ -386,3 +386,29 @@ async def test_create_action_item_not_found(monkeypatch):
             json={"content": "x", "assignee": "", "deadline": "", "priority": "medium"},
         )
     assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_create_decision_missing_content_returns_422(monkeypatch):
+    def _raise_value_error(mid, data):
+        raise ValueError("content is required")
+    monkeypatch.setattr(storage, "add_decision", _raise_value_error)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/meetings/2026-03-28_14-30/decisions",
+            json={"rationale": ""},
+        )
+    assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_create_action_item_missing_content_returns_422(monkeypatch):
+    def _raise_value_error(mid, data):
+        raise ValueError("content is required")
+    monkeypatch.setattr(storage, "add_action_item", _raise_value_error)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/meetings/2026-03-28_14-30/action-items",
+            json={"priority": "medium"},
+        )
+    assert response.status_code == 422

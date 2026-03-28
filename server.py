@@ -180,7 +180,10 @@ def patch_decision(meeting_id: str, decision_id: str, body: dict = Body(...)):
 
 @app.post("/meetings/{meeting_id}/decisions")
 def create_decision(meeting_id: str, body: dict = Body(...)):
-    result = storage.add_decision(meeting_id, body)
+    try:
+        result = storage.add_decision(meeting_id, body)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     if result is None:
         raise HTTPException(status_code=404, detail="Meeting not found")
     return result
@@ -188,7 +191,10 @@ def create_decision(meeting_id: str, body: dict = Body(...)):
 
 @app.post("/meetings/{meeting_id}/action-items")
 def create_action_item(meeting_id: str, body: dict = Body(...)):
-    result = storage.add_action_item(meeting_id, body)
+    try:
+        result = storage.add_action_item(meeting_id, body)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     if result is None:
         raise HTTPException(status_code=404, detail="Meeting not found")
     return result
