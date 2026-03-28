@@ -338,3 +338,51 @@ async def test_patch_action_item_not_found(monkeypatch):
             json={"status": "done"},
         )
     assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_create_decision_success(monkeypatch):
+    new_d = {"id": "d-2", "content": "新決議", "rationale": "", "related_people": [], "status": "confirmed"}
+    monkeypatch.setattr(storage, "add_decision", lambda mid, data: new_d)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/meetings/2026-03-28_14-30/decisions",
+            json={"content": "新決議", "rationale": "", "related_people": []},
+        )
+    assert response.status_code == 200
+    assert response.json()["id"] == "d-2"
+
+
+@pytest.mark.anyio
+async def test_create_decision_not_found(monkeypatch):
+    monkeypatch.setattr(storage, "add_decision", lambda mid, data: None)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/meetings/nonexistent/decisions",
+            json={"content": "x", "rationale": "", "related_people": []},
+        )
+    assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_create_action_item_success(monkeypatch):
+    new_a = {"id": "a-2", "content": "新任務", "assignee": "", "deadline": "", "priority": "medium", "status": "pending"}
+    monkeypatch.setattr(storage, "add_action_item", lambda mid, data: new_a)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/meetings/2026-03-28_14-30/action-items",
+            json={"content": "新任務", "assignee": "", "deadline": "", "priority": "medium"},
+        )
+    assert response.status_code == 200
+    assert response.json()["id"] == "a-2"
+
+
+@pytest.mark.anyio
+async def test_create_action_item_not_found(monkeypatch):
+    monkeypatch.setattr(storage, "add_action_item", lambda mid, data: None)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/meetings/nonexistent/action-items",
+            json={"content": "x", "assignee": "", "deadline": "", "priority": "medium"},
+        )
+    assert response.status_code == 404
