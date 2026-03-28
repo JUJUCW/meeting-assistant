@@ -4,7 +4,7 @@ import threading
 import tempfile
 import os
 from datetime import datetime
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 import whisper
 import analyzer
@@ -160,6 +160,30 @@ def get_meeting(meeting_id: str):
     if meeting is None:
         raise HTTPException(status_code=404, detail="Meeting not found")
     return meeting
+
+
+@app.delete("/meetings/{meeting_id}")
+def delete_meeting_endpoint(meeting_id: str):
+    ok = storage.delete_meeting(meeting_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    return {"status": "deleted"}
+
+
+@app.patch("/meetings/{meeting_id}/decisions/{decision_id}")
+def patch_decision(meeting_id: str, decision_id: str, body: dict = Body(...)):
+    result = storage.update_decision(meeting_id, decision_id, body)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Decision not found")
+    return result
+
+
+@app.patch("/meetings/{meeting_id}/action-items/{item_id}")
+def patch_action_item(meeting_id: str, item_id: str, body: dict = Body(...)):
+    result = storage.update_action_item(meeting_id, item_id, body)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Action item not found")
+    return result
 
 
 @app.get("/action-items/pending")

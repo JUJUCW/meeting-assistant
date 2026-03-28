@@ -3,6 +3,7 @@ import io
 import httpx
 from httpx import AsyncClient, ASGITransport
 from server import app
+import storage
 
 @pytest.mark.anyio
 async def test_health():
@@ -270,3 +271,70 @@ async def test_resolve_action_item_not_found():
         ) as client:
             res = await client.post("/action-items/bad-meeting/a-99/resolve")
         assert res.status_code == 404
+
+
+# ── Task 2 tests: delete and patch endpoints ──
+
+@pytest.mark.anyio
+async def test_delete_meeting_success(monkeypatch):
+    monkeypatch.setattr(storage, "delete_meeting", lambda mid: True)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.delete("/meetings/2026-03-28_14-30")
+    assert response.status_code == 200
+    assert response.json() == {"status": "deleted"}
+
+
+@pytest.mark.anyio
+async def test_delete_meeting_not_found(monkeypatch):
+    monkeypatch.setattr(storage, "delete_meeting", lambda mid: False)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.delete("/meetings/nonexistent")
+    assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_patch_decision_success(monkeypatch):
+    updated = {"id": "d-1", "content": "新決議", "rationale": "效率", "related_people": [], "status": "confirmed"}
+    monkeypatch.setattr(storage, "update_decision", lambda mid, did, updates: updated)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.patch(
+            "/meetings/2026-03-28_14-30/decisions/d-1",
+            json={"content": "新決議"},
+        )
+    assert response.status_code == 200
+    assert response.json()["content"] == "新決議"
+
+
+@pytest.mark.anyio
+async def test_patch_decision_not_found(monkeypatch):
+    monkeypatch.setattr(storage, "update_decision", lambda mid, did, updates: None)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.patch(
+            "/meetings/nonexistent/decisions/d-1",
+            json={"content": "x"},
+        )
+    assert response.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_patch_action_item_success(monkeypatch):
+    updated = {"id": "a-1", "content": "更新文件", "assignee": "小明", "deadline": "2026-04-01", "priority": "high", "status": "done"}
+    monkeypatch.setattr(storage, "update_action_item", lambda mid, iid, updates: updated)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.patch(
+            "/meetings/2026-03-28_14-30/action-items/a-1",
+            json={"status": "done"},
+        )
+    assert response.status_code == 200
+    assert response.json()["status"] == "done"
+
+
+@pytest.mark.anyio
+async def test_patch_action_item_not_found(monkeypatch):
+    monkeypatch.setattr(storage, "update_action_item", lambda mid, iid, updates: None)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.patch(
+            "/meetings/nonexistent/action-items/a-1",
+            json={"status": "done"},
+        )
+    assert response.status_code == 404
