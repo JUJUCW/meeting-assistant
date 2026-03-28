@@ -714,7 +714,9 @@
               </div>
             </div>
             <button class="btn-resolve"
-              onclick="resolveHistoryItem('${escapeHtml(item.meeting_id)}','${escapeHtml(item.id)}', this)">
+              data-meeting-id="${escapeHtml(item.meeting_id)}"
+              data-item-id="${escapeHtml(item.id)}"
+              onclick="resolveHistoryItem(this.dataset.meetingId, this.dataset.itemId, this)">
               標記完成
             </button>
           </div>
