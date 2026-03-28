@@ -16,13 +16,15 @@ app.add_middleware(
 
 # In-memory job store: { job_id: { "status": "pending"|"processing"|"done"|"error", "segments": [...], "error": str } }
 jobs: dict = {}
+jobs_lock = threading.Lock()
 
 ALLOWED_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm"}
 
 
 def _run_transcription(job_id: str, file_path: str):
     import whisper
-    jobs[job_id]["status"] = "processing"
+    with jobs_lock:
+        jobs[job_id]["status"] = "processing"
     try:
         model = whisper.load_model("base")
         result = model.transcribe(file_path)
@@ -30,13 +32,16 @@ def _run_transcription(job_id: str, file_path: str):
             {"id": i, "text": seg["text"].strip(), "tag": None}
             for i, seg in enumerate(result["segments"])
         ]
-        jobs[job_id]["segments"] = segments
-        jobs[job_id]["status"] = "done"
+        with jobs_lock:
+            jobs[job_id]["segments"] = segments
+            jobs[job_id]["status"] = "done"
     except Exception as e:
-        jobs[job_id]["status"] = "error"
-        jobs[job_id]["error"] = str(e)
+        with jobs_lock:
+            jobs[job_id]["status"] = "error"
+            jobs[job_id]["error"] = str(e)
     finally:
-        os.unlink(file_path)
+        if os.path.exists(file_path):
+            os.unlink(file_path)
 
 
 @app.post("/transcribe")
@@ -54,7 +59,8 @@ async def transcribe(file: UploadFile = File(...)):
         tmp_path = tmp.name
 
     job_id = str(uuid.uuid4())
-    jobs[job_id] = {"status": "pending", "segments": [], "error": None}
+    with jobs_lock:
+        jobs[job_id] = {"status": "pending", "segments": [], "error": None}
     thread = threading.Thread(target=_run_transcription, args=(job_id, tmp_path), daemon=True)
     thread.start()
     return {"job_id": job_id}
