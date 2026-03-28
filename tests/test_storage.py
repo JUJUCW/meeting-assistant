@@ -84,3 +84,73 @@ def test_corrupted_file_skipped_in_list(tmp_path, monkeypatch):
     (storage.MEETINGS_DIR / "bad.json").write_text("{{not json")
     result = storage.list_meetings()
     assert len(result) == 1
+
+
+def test_delete_meeting_returns_true():
+    storage.save_meeting(_sample_meeting())
+    assert storage.delete_meeting("2026-03-28_14-30") is True
+    assert storage.load_meeting("2026-03-28_14-30") is None
+
+
+def test_delete_meeting_missing_returns_false():
+    assert storage.delete_meeting("nonexistent") is False
+
+
+def test_update_decision_returns_updated():
+    storage.save_meeting(_sample_meeting())
+    result = storage.update_decision("2026-03-28_14-30", "d-1", {"content": "新決議"})
+    assert result is not None
+    assert result["content"] == "新決議"
+    assert result["rationale"] == "效率"  # unchanged
+
+
+def test_update_decision_persists():
+    storage.save_meeting(_sample_meeting())
+    storage.update_decision("2026-03-28_14-30", "d-1", {"content": "新決議"})
+    loaded = storage.load_meeting("2026-03-28_14-30")
+    assert loaded["decisions"][0]["content"] == "新決議"
+
+
+def test_update_decision_missing_returns_none():
+    storage.save_meeting(_sample_meeting())
+    assert storage.update_decision("2026-03-28_14-30", "d-99", {"content": "x"}) is None
+
+
+def test_update_decision_missing_meeting_returns_none():
+    assert storage.update_decision("nonexistent", "d-1", {"content": "x"}) is None
+
+
+def test_update_action_item_returns_updated():
+    storage.save_meeting(_sample_meeting())
+    result = storage.update_action_item("2026-03-28_14-30", "a-1", {"status": "done"})
+    assert result is not None
+    assert result["status"] == "done"
+    assert result["content"] == "更新文件"  # unchanged
+
+
+def test_update_action_item_persists():
+    storage.save_meeting(_sample_meeting())
+    storage.update_action_item("2026-03-28_14-30", "a-1", {"assignee": "小花"})
+    loaded = storage.load_meeting("2026-03-28_14-30")
+    assert loaded["action_items"][0]["assignee"] == "小花"
+
+
+def test_update_action_item_missing_returns_none():
+    storage.save_meeting(_sample_meeting())
+    assert storage.update_action_item("2026-03-28_14-30", "a-99", {"status": "done"}) is None
+
+
+def test_update_action_item_missing_meeting_returns_none():
+    assert storage.update_action_item("nonexistent", "a-1", {"status": "done"}) is None
+
+
+def test_list_meetings_includes_pending_count():
+    m = _sample_meeting()
+    m["action_items"].append({
+        "id": "a-2", "content": "審核報告", "assignee": "小花",
+        "deadline": "2026-04-05", "priority": "medium", "status": "done"
+    })
+    storage.save_meeting(m)
+    result = storage.list_meetings()
+    assert result[0]["pending_action_item_count"] == 1
+    assert result[0]["action_item_count"] == 2

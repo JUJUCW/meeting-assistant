@@ -38,6 +38,9 @@ def list_meetings() -> list[dict]:
                 "created_at": m["created_at"],
                 "decision_count": len(m.get("decisions", [])),
                 "action_item_count": len(m.get("action_items", [])),
+                "pending_action_item_count": sum(
+                    1 for a in m.get("action_items", []) if a.get("status") == "pending"
+                ),
             })
         except Exception as e:
             logger.warning("Skipping corrupted meeting file %s: %s", path, e)
@@ -80,3 +83,47 @@ def resolve_action_item(meeting_id: str, item_id: str) -> bool:
     except Exception as e:
         logger.warning("Error resolving action item %s in %s: %s", item_id, meeting_id, e)
         return False
+
+
+def delete_meeting(meeting_id: str) -> bool:
+    path = MEETINGS_DIR / f"{meeting_id}.json"
+    if not path.exists():
+        return False
+    path.unlink()
+    return True
+
+
+def update_decision(meeting_id: str, decision_id: str, updates: dict) -> dict | None:
+    path = MEETINGS_DIR / f"{meeting_id}.json"
+    if not path.exists():
+        return None
+    try:
+        m = json.loads(path.read_text())
+        for decision in m.get("decisions", []):
+            if decision["id"] == decision_id:
+                for k, v in updates.items():
+                    decision[k] = v
+                path.write_text(json.dumps(m, ensure_ascii=False, indent=2))
+                return decision
+        return None
+    except Exception as e:
+        logger.warning("Error updating decision %s in %s: %s", decision_id, meeting_id, e)
+        return None
+
+
+def update_action_item(meeting_id: str, item_id: str, updates: dict) -> dict | None:
+    path = MEETINGS_DIR / f"{meeting_id}.json"
+    if not path.exists():
+        return None
+    try:
+        m = json.loads(path.read_text())
+        for item in m.get("action_items", []):
+            if item["id"] == item_id:
+                for k, v in updates.items():
+                    item[k] = v
+                path.write_text(json.dumps(m, ensure_ascii=False, indent=2))
+                return item
+        return None
+    except Exception as e:
+        logger.warning("Error updating action item %s in %s: %s", item_id, meeting_id, e)
+        return None
