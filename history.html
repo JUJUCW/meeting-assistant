@@ -1266,8 +1266,7 @@
       });
 
       document.getElementById('cancel-add-decision').addEventListener('click', () => {
-        document.getElementById('add-decision-form').style.display = 'none';
-        activeEditorCleanup = null;
+        if (activeEditorCleanup) activeEditorCleanup();
       });
 
       document.getElementById('save-add-decision').addEventListener('click', async () => {
@@ -1317,8 +1316,7 @@
       });
 
       document.getElementById('cancel-add-action').addEventListener('click', () => {
-        document.getElementById('add-action-form').style.display = 'none';
-        activeEditorCleanup = null;
+        if (activeEditorCleanup) activeEditorCleanup();
       });
 
       document.getElementById('save-add-action').addEventListener('click', async () => {
