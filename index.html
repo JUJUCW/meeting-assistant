@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>會議助理</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 48px 16px;
+    }
+    .container { width: 100%; max-width: 600px; }
+    h1 { font-size: 26px; font-weight: 700; color: #1a1a2e; margin-bottom: 8px; }
+    .subtitle { font-size: 14px; color: #888; margin-bottom: 32px; }
+
+    .steps {
+      display: flex;
+      align-items: center;
+      margin-bottom: 32px;
+      gap: 0;
+    }
+    .step-dot {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: #e0e0e0;
+      color: #aaa;
+      font-size: 13px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .step-dot.active { background: #6c63ff; color: #fff; }
+    .step-dot.done { background: #4caf50; color: #fff; }
+    .step-line { flex: 1; height: 2px; background: #e0e0e0; }
+    .step-line.done { background: #4caf50; }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    }
+    .card h2 { font-size: 18px; color: #1a1a2e; margin-bottom: 6px; }
+    .card p { font-size: 14px; color: #666; margin-bottom: 20px; }
+
+    .btn {
+      padding: 12px 24px;
+      border: none; border-radius: 10px;
+      font-size: 15px; cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-primary { background: #6c63ff; color: #fff; }
+    .btn-primary:hover { background: #574fd6; }
+    .btn-primary:disabled { background: #c5c2f5; cursor: not-allowed; }
+    .btn-secondary { background: #f0f2f5; color: #555; }
+    .btn-secondary:hover { background: #e0e2e8; }
+
+    .error-msg { color: #e74c3c; font-size: 13px; margin-top: 8px; }
+
+    .step-panel { display: none; }
+    .step-panel.active { display: block; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>會議助理</h1>
+    <p class="subtitle">語音轉文字 · 標記決議與待辦 · 一鍵輸出摘要</p>
+
+    <div class="steps">
+      <div class="step-dot active" id="dot-1">1</div>
+      <div class="step-line" id="line-1"></div>
+      <div class="step-dot" id="dot-2">2</div>
+      <div class="step-line" id="line-2"></div>
+      <div class="step-dot" id="dot-3">3</div>
+      <div class="step-line" id="line-3"></div>
+      <div class="step-dot" id="dot-4">4</div>
+    </div>
+
+    <div class="step-panel active" id="panel-1">
+      <div class="card">
+        <h2>上傳或錄製音訊</h2>
+        <p>選擇音檔（mp3、wav、m4a）或直接錄音</p>
+        <div id="server-error" class="error-msg" style="display:none">
+          ⚠️ 無法連線到本地伺服器，請先執行：<code>uvicorn server:app --reload</code>
+        </div>
+        <div style="margin-bottom:16px">
+          <label style="font-size:14px;font-weight:600;display:block;margin-bottom:8px">上傳音檔</label>
+          <input type="file" id="fileInput" accept=".mp3,.wav,.m4a,.ogg,.flac,.webm" style="font-size:14px;width:100%">
+          <div id="file-error" class="error-msg" style="display:none"></div>
+        </div>
+        <div style="text-align:center;color:#bbb;margin:16px 0;font-size:13px">— 或 —</div>
+        <div style="margin-bottom:24px">
+          <label style="font-size:14px;font-weight:600;display:block;margin-bottom:8px">即時錄音</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-secondary" id="recordBtn" onclick="toggleRecord()">● 開始錄音</button>
+            <span id="recordStatus" style="font-size:13px;color:#888"></span>
+          </div>
+          <div id="record-error" class="error-msg" style="display:none"></div>
+        </div>
+        <button class="btn btn-primary" id="submitBtn" onclick="submitAudio()" disabled>送出轉錄</button>
+      </div>
+    </div>
+
+    <div class="step-panel" id="panel-2">
+      <div class="card">
+        <h2>轉錄中...</h2>
+        <p>正在使用本地 Whisper 模型處理音訊，請稍候</p>
+        <div style="text-align:center;padding:24px 0">
+          <div id="spinner" style="font-size:32px;margin-bottom:16px">⏳</div>
+          <div id="progress-status" style="font-size:15px;color:#555">初始化中...</div>
+          <div id="progress-error" class="error-msg" style="margin-top:12px;display:none"></div>
+          <button class="btn btn-secondary" id="retryBtn" style="margin-top:16px;display:none" onclick="retryTranscription()">重試</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="step-panel" id="panel-3">
+      <div class="card">
+        <h2>標記逐字稿</h2>
+        <p>點擊每段文字旁的按鈕，標記為「決議」或「待辦」</p>
+        <div id="segments-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:24px"></div>
+        <button class="btn btn-primary" onclick="goToStep(4); renderSummary()">產生摘要</button>
+      </div>
+    </div>
+
+    <div class="step-panel" id="panel-4">
+      <div class="card">
+        <h2>會議摘要</h2>
+        <p>整理完成，可一鍵複製</p>
+        <div id="summary-output" style="white-space:pre-wrap;font-size:14px;color:#333;background:#f8f8fb;border-radius:10px;padding:16px;line-height:1.8;margin-bottom:16px;min-height:100px"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" id="copyBtn" onclick="copySummary()">複製摘要</button>
+          <button class="btn btn-secondary" onclick="startOver()">重新開始</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- State ---
+    let currentStep = 1;
+    let jobId = null;
+    let segments = [];
+    const API = 'http://localhost:8000';
+
+    // --- Step navigation ---
+    function goToStep(n) {
+      document.getElementById(`panel-${currentStep}`).classList.remove('active');
+      document.getElementById(`dot-${currentStep}`).classList.remove('active');
+      document.getElementById(`dot-${currentStep}`).classList.add('done');
+      if (currentStep < 4) {
+        document.getElementById(`line-${currentStep}`).classList.add('done');
+      }
+      currentStep = n;
+      document.getElementById(`panel-${n}`).classList.add('active');
+      document.getElementById(`dot-${n}`).classList.add('active');
+      document.getElementById(`dot-${n}`).classList.remove('done');
+    }
+
+    // --- Step 1: Audio input ---
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let recordedBlob = null;
+    let selectedFile = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      checkServer();
+      document.getElementById('fileInput').addEventListener('change', (e) => {
+        selectedFile = e.target.files[0] || null;
+        recordedBlob = null;
+        updateSubmitBtn();
+      });
+    });
+
+    async function checkServer() {
+      try {
+        const res = await fetch(`${API}/health`);
+        if (!res.ok) throw new Error();
+      } catch {
+        document.getElementById('server-error').style.display = 'block';
+      }
+    }
+
+    function updateSubmitBtn() {
+      const hasAudio = selectedFile || recordedBlob;
+      document.getElementById('submitBtn').disabled = !hasAudio;
+    }
+
+    async function toggleRecord() {
+      const btn = document.getElementById('recordBtn');
+      const status = document.getElementById('recordStatus');
+      const errEl = document.getElementById('record-error');
+      errEl.style.display = 'none';
+
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        btn.textContent = '● 開始錄音';
+        status.textContent = '';
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
+        mediaRecorder.onstop = () => {
+          recordedBlob = new Blob(recordedChunks, { type: 'audio/webm' });
+          selectedFile = null;
+          document.getElementById('fileInput').value = '';
+          status.textContent = '錄音完成 ✓';
+          stream.getTracks().forEach(t => t.stop());
+          updateSubmitBtn();
+        };
+        mediaRecorder.start();
+        btn.textContent = '■ 停止錄音';
+        status.textContent = '錄音中...';
+      } catch {
+        errEl.textContent = '無法存取麥克風，請確認瀏覽器已授予麥克風權限。';
+        errEl.style.display = 'block';
+      }
+    }
+
+    async function submitAudio() {
+      const audio = selectedFile || recordedBlob;
+      if (!audio) return;
+      const formData = new FormData();
+      const filename = selectedFile ? selectedFile.name : 'recording.webm';
+      formData.append('file', audio, filename);
+      try {
+        const res = await fetch(`${API}/transcribe`, { method: 'POST', body: formData });
+        if (!res.ok) {
+          const err = await res.json();
+          document.getElementById('file-error').textContent = err.detail;
+          document.getElementById('file-error').style.display = 'block';
+          return;
+        }
+        const data = await res.json();
+        jobId = data.job_id;
+        goToStep(2);
+        startPolling();
+      } catch {
+        document.getElementById('server-error').style.display = 'block';
+      }
+    }
+
+    // --- Step 2: Polling ---
+    let pollTimer = null;
+
+    function startPolling() {
+      document.getElementById('progress-status').textContent = '轉錄中，請稍候...';
+      pollTimer = setInterval(poll, 2000);
+    }
+
+    async function poll() {
+      try {
+        const res = await fetch(`${API}/status/${jobId}`);
+        if (!res.ok) throw new Error('status error');
+        const data = await res.json();
+        if (data.status === 'done') {
+          clearInterval(pollTimer);
+          await loadResult();
+        } else if (data.status === 'error') {
+          clearInterval(pollTimer);
+          showTranscribeError(data.error || '轉錄失敗');
+        } else {
+          const labels = { pending: '等待處理...', processing: '轉錄中，請稍候...' };
+          document.getElementById('progress-status').textContent = labels[data.status] || '處理中...';
+        }
+      } catch {
+        clearInterval(pollTimer);
+        showTranscribeError('無法連線到伺服器');
+      }
+    }
+
+    function showTranscribeError(msg) {
+      document.getElementById('spinner').textContent = '❌';
+      document.getElementById('progress-status').textContent = '發生錯誤';
+      const errEl = document.getElementById('progress-error');
+      errEl.textContent = msg;
+      errEl.style.display = 'block';
+      document.getElementById('retryBtn').style.display = 'inline-block';
+    }
+
+    function retryTranscription() {
+      goToStep(1);
+      document.getElementById('progress-error').style.display = 'none';
+      document.getElementById('retryBtn').style.display = 'none';
+      document.getElementById('spinner').textContent = '⏳';
+    }
+
+    async function loadResult() {
+      const res = await fetch(`${API}/result/${jobId}`);
+      const data = await res.json();
+      segments = data.segments;
+      goToStep(3);
+      renderSegments();
+    }
+
+    // --- Step 3: Tag segments ---
+    function renderSegments() {
+      const list = document.getElementById('segments-list');
+      list.innerHTML = '';
+      segments.forEach(seg => {
+        const div = document.createElement('div');
+        div.style.cssText = 'display:flex;gap:10px;align-items:flex-start;background:#f8f8fb;border-radius:10px;padding:12px';
+        div.innerHTML = `
+          <span style="flex:1;font-size:14px;color:#333;line-height:1.6">${escapeHtml(seg.text)}</span>
+          <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+            <button onclick="setTag(${seg.id},'decision')" style="
+              padding:3px 10px;border-radius:6px;border:1.5px solid #6c63ff;
+              background:${seg.tag==='decision'?'#6c63ff':'#fff'};
+              color:${seg.tag==='decision'?'#fff':'#6c63ff'};
+              font-size:12px;cursor:pointer">決議</button>
+            <button onclick="setTag(${seg.id},'action')" style="
+              padding:3px 10px;border-radius:6px;border:1.5px solid #ff6584;
+              background:${seg.tag==='action'?'#ff6584':'#fff'};
+              color:${seg.tag==='action'?'#fff':'#ff6584'};
+              font-size:12px;cursor:pointer">待辦</button>
+          </div>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    function setTag(id, tag) {
+      const seg = segments.find(s => s.id === id);
+      if (!seg) return;
+      seg.tag = seg.tag === tag ? null : tag;
+      renderSegments();
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // --- Step 4: Summary ---
+    function renderSummary() {
+      const decisions = segments.filter(s => s.tag === 'decision');
+      const actions = segments.filter(s => s.tag === 'action');
+      const allText = segments.map(s => s.text).join('\n');
+
+      let output = '【會議記錄】\n';
+      output += allText + '\n';
+
+      if (decisions.length > 0) {
+        output += '\n【決議事項】\n';
+        decisions.forEach((s, i) => { output += `${i+1}. ${s.text}\n`; });
+      }
+
+      if (actions.length > 0) {
+        output += '\n【待辦事項】\n';
+        actions.forEach((s, i) => { output += `${i+1}. ${s.text}\n`; });
+      }
+
+      document.getElementById('summary-output').textContent = output;
+    }
+
+    async function copySummary() {
+      const text = document.getElementById('summary-output').textContent;
+      await navigator.clipboard.writeText(text);
+      const btn = document.getElementById('copyBtn');
+      btn.textContent = '已複製 ✓';
+      setTimeout(() => { btn.textContent = '複製摘要'; }, 2000);
+    }
+
+    function startOver() {
+      jobId = null;
+      segments = [];
+      selectedFile = null;
+      recordedBlob = null;
+      document.getElementById('fileInput').value = '';
+      document.getElementById('recordStatus').textContent = '';
+      document.getElementById('submitBtn').disabled = true;
+
+      for (let i = 1; i <= 4; i++) {
+        document.getElementById(`dot-${i}`).classList.remove('active', 'done');
+        if (i < 4) document.getElementById(`line-${i}`).classList.remove('done');
+        document.getElementById(`panel-${i}`).classList.remove('active');
+      }
+      document.getElementById('dot-1').classList.add('active');
+      document.getElementById('panel-1').classList.add('active');
+      currentStep = 1;
+    }
+  </script>
+</body>
+</html>
