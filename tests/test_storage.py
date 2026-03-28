@@ -154,3 +154,72 @@ def test_list_meetings_includes_pending_count():
     result = storage.list_meetings()
     assert result[0]["pending_action_item_count"] == 1
     assert result[0]["action_item_count"] == 2
+
+
+def test_add_decision_returns_new_item():
+    storage.save_meeting(_sample_meeting())
+    result = storage.add_decision("2026-03-28_14-30", {
+        "content": "新決議", "rationale": "效率", "related_people": ["小明"]
+    })
+    assert result is not None
+    assert result["id"] == "d-2"  # existing d-1, next is d-2
+    assert result["content"] == "新決議"
+    assert result["status"] == "confirmed"
+
+
+def test_add_decision_persists():
+    storage.save_meeting(_sample_meeting())
+    storage.add_decision("2026-03-28_14-30", {"content": "新決議", "rationale": "", "related_people": []})
+    loaded = storage.load_meeting("2026-03-28_14-30")
+    assert len(loaded["decisions"]) == 2
+    assert loaded["decisions"][1]["content"] == "新決議"
+
+
+def test_add_decision_first_item_gets_id_d1():
+    m = _sample_meeting()
+    m["decisions"] = []
+    storage.save_meeting(m)
+    result = storage.add_decision("2026-03-28_14-30", {"content": "第一個決議", "rationale": "", "related_people": []})
+    assert result["id"] == "d-1"
+
+
+def test_add_decision_missing_meeting_returns_none():
+    assert storage.add_decision("nonexistent", {"content": "x", "rationale": "", "related_people": []}) is None
+
+
+def test_add_action_item_returns_new_item():
+    storage.save_meeting(_sample_meeting())
+    result = storage.add_action_item("2026-03-28_14-30", {
+        "content": "新任務", "assignee": "小花", "deadline": "2026-04-10", "priority": "high"
+    })
+    assert result is not None
+    assert result["id"] == "a-2"  # existing a-1, next is a-2
+    assert result["content"] == "新任務"
+    assert result["status"] == "pending"
+    assert result["priority"] == "high"
+
+
+def test_add_action_item_persists():
+    storage.save_meeting(_sample_meeting())
+    storage.add_action_item("2026-03-28_14-30", {
+        "content": "新任務", "assignee": "", "deadline": "", "priority": "medium"
+    })
+    loaded = storage.load_meeting("2026-03-28_14-30")
+    assert len(loaded["action_items"]) == 2
+    assert loaded["action_items"][1]["content"] == "新任務"
+
+
+def test_add_action_item_first_item_gets_id_a1():
+    m = _sample_meeting()
+    m["action_items"] = []
+    storage.save_meeting(m)
+    result = storage.add_action_item("2026-03-28_14-30", {
+        "content": "第一個任務", "assignee": "", "deadline": "", "priority": "low"
+    })
+    assert result["id"] == "a-1"
+
+
+def test_add_action_item_missing_meeting_returns_none():
+    assert storage.add_action_item("nonexistent", {
+        "content": "x", "assignee": "", "deadline": "", "priority": "medium"
+    }) is None

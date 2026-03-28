@@ -127,3 +127,54 @@ def update_action_item(meeting_id: str, item_id: str, updates: dict) -> dict | N
     except Exception as e:
         logger.warning("Error updating action item %s in %s: %s", item_id, meeting_id, e)
         return None
+
+
+def add_decision(meeting_id: str, data: dict) -> dict | None:
+    path = MEETINGS_DIR / f"{meeting_id}.json"
+    if not path.exists():
+        return None
+    try:
+        m = json.loads(path.read_text())
+        decisions = m.get("decisions", [])
+        nums = [int(d["id"].split("-")[1]) for d in decisions if d.get("id", "").startswith("d-")]
+        next_num = max(nums) + 1 if nums else 1
+        new_decision = {
+            "id": f"d-{next_num}",
+            "status": "confirmed",
+            "content": data["content"],
+            "rationale": data.get("rationale", ""),
+            "related_people": data.get("related_people", []),
+        }
+        decisions.append(new_decision)
+        m["decisions"] = decisions
+        path.write_text(json.dumps(m, ensure_ascii=False, indent=2))
+        return new_decision
+    except Exception as e:
+        logger.warning("Error adding decision to %s: %s", meeting_id, e)
+        return None
+
+
+def add_action_item(meeting_id: str, data: dict) -> dict | None:
+    path = MEETINGS_DIR / f"{meeting_id}.json"
+    if not path.exists():
+        return None
+    try:
+        m = json.loads(path.read_text())
+        items = m.get("action_items", [])
+        nums = [int(a["id"].split("-")[1]) for a in items if a.get("id", "").startswith("a-")]
+        next_num = max(nums) + 1 if nums else 1
+        new_item = {
+            "id": f"a-{next_num}",
+            "status": "pending",
+            "content": data["content"],
+            "assignee": data.get("assignee", ""),
+            "deadline": data.get("deadline", ""),
+            "priority": data["priority"],
+        }
+        items.append(new_item)
+        m["action_items"] = items
+        path.write_text(json.dumps(m, ensure_ascii=False, indent=2))
+        return new_item
+    except Exception as e:
+        logger.warning("Error adding action item to %s: %s", meeting_id, e)
+        return None
