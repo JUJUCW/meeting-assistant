@@ -619,7 +619,9 @@
     }
 
     function statusLabel(s) {
-      return s === 'completed' ? '已完成' : '待處理';
+      if (s === 'completed') return '已完成';
+      if (s === 'pending') return '待處理';
+      return escapeHtml(s); // safe fallback
     }
 
     // ── State ──────────────────────────────────────────────────────────────────
@@ -778,8 +780,7 @@
     // ── Detail View ────────────────────────────────────────────────────────────
 
     async function openDetail(meetingId) {
-      // meetingId may be passed as an id string or a meeting object (legacy call)
-      const id = (typeof meetingId === 'object' && meetingId !== null) ? meetingId.id : meetingId;
+      const id = meetingId;
 
       try {
         const r = await fetch(`${API}/meetings/${id}`);
@@ -798,7 +799,7 @@
         document.getElementById('list-view').style.display = 'none';
         document.getElementById('detail-view').style.display = 'block';
 
-        document.getElementById('detail-date').textContent = meeting.date;
+        document.getElementById('detail-date').textContent = meeting.date || meeting.created_at?.replace('T', ' ').slice(0, 16) || '';
 
         renderDecisions(meeting);
         renderActionItems(meeting);
@@ -865,6 +866,7 @@
         container.appendChild(item);
       });
 
+      container.removeEventListener('click', handleDecisionClick);
       container.addEventListener('click', handleDecisionClick);
     }
 
@@ -1005,6 +1007,7 @@
         container.appendChild(item);
       });
 
+      container.removeEventListener('click', handleActionClick);
       container.addEventListener('click', handleActionClick);
     }
 
@@ -1098,6 +1101,18 @@
         renderActionItems(currentMeeting);
       } catch (err) {
         console.error('Toggle status failed:', err);
+        let targetCard = null;
+        document.querySelectorAll('.action-item').forEach(c => { if (c.dataset.actionId === String(actionId)) targetCard = c; });
+        if (targetCard) {
+          let errEl = targetCard.querySelector('.toggle-error');
+          if (!errEl) {
+            errEl = document.createElement('span');
+            errEl.className = 'toggle-error';
+            errEl.style.cssText = 'color:#e88;font-size:12px;margin-left:8px;';
+            targetCard.querySelector('.item-actions').appendChild(errEl);
+          }
+          errEl.textContent = '更新失敗，請再試一次。';
+        }
       }
     }
 
