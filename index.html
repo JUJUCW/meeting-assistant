@@ -367,9 +367,6 @@
 
     /* ── Segment Items ── */
     .segment-item {
-      display: flex;
-      gap: 14px;
-      align-items: flex-start;
       background: rgba(212,175,55,0.02);
       border: 1px solid rgba(212,175,55,0.08);
       padding: 16px;
@@ -385,38 +382,6 @@
       color: var(--cream);
       line-height: 1.75;
       letter-spacing: 0.02em;
-    }
-    .segment-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
-
-    .tag-btn {
-      padding: 6px 12px;
-      border-radius: 0;
-      font-family: var(--font-body);
-      font-size: 11px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      cursor: pointer;
-      border: 1px solid;
-      transition: all 0.2s;
-      background: transparent;
-    }
-    .tag-btn-decision {
-      border-color: rgba(212,175,55,0.4);
-      color: rgba(212,175,55,0.6);
-    }
-    .tag-btn-decision.active, .tag-btn-decision:hover {
-      background: var(--gold);
-      color: #0A0A0A;
-      border-color: var(--gold);
-    }
-    .tag-btn-action {
-      border-color: rgba(242,240,228,0.18);
-      color: rgba(242,240,228,0.35);
-    }
-    .tag-btn-action.active, .tag-btn-action:hover {
-      background: var(--cream);
-      color: #0A0A0A;
-      border-color: var(--cream);
     }
 
     /* ── AI Analysis Banners ── */
@@ -940,31 +905,16 @@
       renderSegments();
     }
 
-    // --- Step 3: Tag segments ---
+    // --- Step 3: Transcript ---
     function renderSegments() {
       const list = document.getElementById('segments-list');
       list.innerHTML = '';
       segments.forEach(seg => {
         const div = document.createElement('div');
         div.className = 'segment-item';
-        div.innerHTML = `
-          <span class="segment-text">${escapeHtml(seg.text)}</span>
-          <div class="segment-actions">
-            <button class="tag-btn tag-btn-decision${seg.tag === 'decision' ? ' active' : ''}"
-              onclick="setTag(${seg.id}, 'decision')">決議</button>
-            <button class="tag-btn tag-btn-action${seg.tag === 'action' ? ' active' : ''}"
-              onclick="setTag(${seg.id}, 'action')">待辦</button>
-          </div>
-        `;
+        div.innerHTML = `<span class="segment-text">${escapeHtml(seg.text)}</span>`;
         list.appendChild(div);
       });
-    }
-
-    function setTag(id, tag) {
-      const seg = segments.find(s => s.id === id);
-      if (!seg) return;
-      seg.tag = seg.tag === tag ? null : tag;
-      renderSegments();
     }
 
     function escapeHtml(str) {
@@ -1038,8 +988,6 @@
 
     // --- Step 4: Summary ---
     function renderSummary() {
-      const taggedDecisions = segments.filter(s => s.tag === 'decision');
-      const taggedActions   = segments.filter(s => s.tag === 'action');
       const allText = segments.map(s => s.text).join('\n');
 
       let output = '【會議記錄】\n' + allText + '\n';
@@ -1051,9 +999,6 @@
           if (d.rationale) output += `（${d.rationale}）`;
           output += '\n';
         });
-      } else if (taggedDecisions.length > 0) {
-        output += '\n【決議事項】\n';
-        taggedDecisions.forEach((s, i) => { output += `${i + 1}. ${s.text}\n`; });
       }
 
       if (actionItems.length > 0) {
@@ -1064,9 +1009,6 @@
           if (a.deadline) output += `（截止：${a.deadline}）`;
           output += '\n';
         });
-      } else if (taggedActions.length > 0) {
-        output += '\n【待辦事項】\n';
-        taggedActions.forEach((s, i) => { output += `${i + 1}. ${s.text}\n`; });
       }
 
       document.getElementById('summary-output').textContent = output;
