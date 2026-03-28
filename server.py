@@ -69,3 +69,23 @@ async def transcribe(file: UploadFile = File(...)):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/status/{job_id}")
+def status(job_id: str):
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"status": job["status"], "error": job.get("error")}
+
+
+@app.get("/result/{job_id}")
+def result(job_id: str):
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job["status"] != "done":
+        raise HTTPException(status_code=202, detail="Not ready yet")
+    return {"segments": job["segments"]}
