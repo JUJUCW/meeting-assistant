@@ -31,7 +31,7 @@ def _run_transcription(job_id: str, file_path: str):
         jobs[job_id]["status"] = "processing"
     try:
         model = whisper.load_model("base")
-        result = model.transcribe(file_path)
+        result = model.transcribe(file_path, language="zh")
         segments = [
             {"id": i, "text": seg["text"].strip(), "tag": None}
             for i, seg in enumerate(result["segments"])
