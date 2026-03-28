@@ -87,6 +87,18 @@
       text-transform: uppercase;
     }
 
+    .history-link {
+      display: inline-block;
+      margin-top: 16px;
+      color: var(--gold);
+      text-decoration: none;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      opacity: 0.8;
+      transition: opacity 0.2s;
+    }
+    .history-link:hover { opacity: 1; }
+
     /* ── Step Indicator ── */
     .steps {
       display: flex;
@@ -605,6 +617,7 @@
         <div class="header-divider-line"></div>
       </div>
       <p class="subtitle">語音轉文字 &nbsp;·&nbsp; 標記決議與待辦 &nbsp;·&nbsp; 一鍵輸出摘要</p>
+      <a href="history.html" class="history-link">歷史紀錄 →</a>
     </header>
 
     <!-- Step Indicator -->
