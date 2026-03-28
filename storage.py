@@ -133,6 +133,8 @@ def add_decision(meeting_id: str, data: dict) -> dict | None:
     path = MEETINGS_DIR / f"{meeting_id}.json"
     if not path.exists():
         return None
+    if "content" not in data:
+        raise ValueError("content is required")
     try:
         m = json.loads(path.read_text())
         decisions = m.get("decisions", [])
@@ -158,6 +160,10 @@ def add_action_item(meeting_id: str, data: dict) -> dict | None:
     path = MEETINGS_DIR / f"{meeting_id}.json"
     if not path.exists():
         return None
+    if "content" not in data:
+        raise ValueError("content is required")
+    if "priority" not in data:
+        raise ValueError("priority is required")
     try:
         m = json.loads(path.read_text())
         items = m.get("action_items", [])

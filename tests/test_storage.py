@@ -223,3 +223,19 @@ def test_add_action_item_missing_meeting_returns_none():
     assert storage.add_action_item("nonexistent", {
         "content": "x", "assignee": "", "deadline": "", "priority": "medium"
     }) is None
+
+
+def test_add_decision_status_cannot_be_overridden():
+    storage.save_meeting(_sample_meeting())
+    result = storage.add_decision("2026-03-28_14-30", {
+        "content": "決議", "rationale": "", "related_people": [], "status": "overridden"
+    })
+    assert result["status"] == "confirmed"
+
+
+def test_add_action_item_status_cannot_be_overridden():
+    storage.save_meeting(_sample_meeting())
+    result = storage.add_action_item("2026-03-28_14-30", {
+        "content": "任務", "assignee": "", "deadline": "", "priority": "medium", "status": "overridden"
+    })
+    assert result["status"] == "pending"
