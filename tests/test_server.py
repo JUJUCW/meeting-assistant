@@ -438,3 +438,45 @@ async def test_transcribe_file_too_large_returns_413():
         )
     assert response.status_code == 413
     assert "200 MB" in response.json()["detail"]
+
+
+# ── Search endpoint tests ──
+
+@pytest.mark.anyio
+async def test_search_endpoint_returns_matching_meetings(monkeypatch):
+    results = [
+        {
+            "id": "2026-03-28_14-30",
+            "created_at": "2026-03-28T14:30:00",
+            "decision_count": 1,
+            "action_item_count": 1,
+            "pending_action_item_count": 1,
+            "hits": [{"field": "transcript", "snippet": "…採用新系統…"}],
+        }
+    ]
+    monkeypatch.setattr(storage, "search_meetings", lambda q: results)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.get("/meetings/search?q=新系統")
+    assert res.status_code == 200
+    data = res.json()
+    assert len(data["meetings"]) == 1
+    assert data["meetings"][0]["id"] == "2026-03-28_14-30"
+    assert data["meetings"][0]["hits"][0]["field"] == "transcript"
+
+
+@pytest.mark.anyio
+async def test_search_endpoint_empty_query_returns_empty(monkeypatch):
+    monkeypatch.setattr(storage, "search_meetings", lambda q: [])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.get("/meetings/search?q=")
+    assert res.status_code == 200
+    assert res.json()["meetings"] == []
+
+
+@pytest.mark.anyio
+async def test_search_endpoint_no_match_returns_empty(monkeypatch):
+    monkeypatch.setattr(storage, "search_meetings", lambda q: [])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.get("/meetings/search?q=notfound")
+    assert res.status_code == 200
+    assert res.json()["meetings"] == []

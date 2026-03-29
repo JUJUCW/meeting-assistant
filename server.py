@@ -158,6 +158,11 @@ def list_meetings():
     return {"meetings": storage.list_meetings()}
 
 
+@app.get("/meetings/search")
+def search_meetings_endpoint(q: str = ""):
+    return {"meetings": storage.search_meetings(q)}
+
+
 @app.get("/meetings/{meeting_id}")
 def get_meeting(meeting_id: str):
     meeting = storage.load_meeting(meeting_id)
