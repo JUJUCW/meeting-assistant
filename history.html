@@ -623,7 +623,13 @@
     <!-- Detail View -->
     <div id="detail-view">
       <button id="back-btn">← 返回列表</button>
-      <div id="detail-date"></div>
+      <div id="detail-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:36px;">
+        <div id="detail-date" style="margin-bottom:0;text-align:left;"></div>
+        <div style="display:flex;gap:10px;">
+          <button class="btn-edit" id="export-md-btn">匯出 MD</button>
+          <button class="btn-edit" id="export-json-btn">匯出 JSON</button>
+        </div>
+      </div>
 
       <div class="section" id="transcript-section" style="display:none">
         <button class="transcript-toggle" id="transcript-toggle" aria-expanded="false">
@@ -714,6 +720,82 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    function exportMarkdown(meeting) {
+      const dateStr = (meeting.created_at || meeting.id || '').replace('T', ' ').slice(0, 16);
+
+      const decisions = meeting.decisions || [];
+      const decisionRows = decisions.length
+        ? decisions.map(d => {
+            const people = (d.related_people || []).join(', ') || '—';
+            return `| ${d.id} | ${d.content || ''} | ${d.rationale || '—'} | ${people} | ${d.status || ''} |`;
+          }).join('\n')
+        : null;
+
+      const actionItems = meeting.action_items || [];
+      const actionRows = actionItems.length
+        ? actionItems.map(a =>
+            `| ${a.id} | ${a.content || ''} | ${a.assignee || '—'} | ${a.deadline || '—'} | ${a.priority || ''} | ${a.status || ''} |`
+          ).join('\n')
+        : null;
+
+      const transcript = (meeting.transcript || '').replace(/\n/g, '');
+
+      const lines = [
+        `# 會議記錄 ${dateStr}`,
+        '',
+        `**建立時間：** ${meeting.created_at || ''}`,
+        '',
+        '---',
+        '',
+        '## 逐字稿',
+        '',
+        transcript || '（無）',
+        '',
+        '---',
+        '',
+        '## 決議事項',
+        '',
+      ];
+
+      if (decisionRows) {
+        lines.push('| # | 決議內容 | 依據 | 相關人員 | 狀態 |');
+        lines.push('|---|---|---|---|---|');
+        lines.push(decisionRows);
+      } else {
+        lines.push('（無）');
+      }
+
+      lines.push('', '---', '', '## 待辦事項', '');
+
+      if (actionRows) {
+        lines.push('| # | 事項 | 負責人 | 截止日期 | 優先順序 | 狀態 |');
+        lines.push('|---|---|---|---|---|---|');
+        lines.push(actionRows);
+      } else {
+        lines.push('（無）');
+      }
+
+      const content = lines.join('\n');
+      const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `meeting-${meeting.id}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function exportJson(meeting) {
+      const content = JSON.stringify(meeting, null, 2);
+      const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `meeting-${meeting.id}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
     }
 
     function priorityLabel(p) {
@@ -905,6 +987,8 @@
         document.getElementById('detail-view').style.display = 'block';
 
         document.getElementById('detail-date').textContent = meeting.date || meeting.created_at?.replace('T', ' ').slice(0, 16) || '';
+        document.getElementById('export-md-btn').onclick = () => exportMarkdown(meeting);
+        document.getElementById('export-json-btn').onclick = () => exportJson(meeting);
 
         renderDecisions(meeting);
         renderActionItems(meeting);
