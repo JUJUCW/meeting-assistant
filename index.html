@@ -743,7 +743,16 @@
     document.addEventListener('DOMContentLoaded', () => {
       checkServer();
       document.getElementById('fileInput').addEventListener('change', (e) => {
-        selectedFile = e.target.files[0] || null;
+        const file = e.target.files[0] || null;
+        if (file && file.size > 200 * 1024 * 1024) {
+          document.getElementById('file-error').textContent = '檔案過大，上限為 200 MB。';
+          document.getElementById('file-error').style.display = 'block';
+          selectedFile = null;
+          e.target.value = '';
+        } else {
+          document.getElementById('file-error').style.display = 'none';
+          selectedFile = file;
+        }
         recordedBlob = null;
         updateSubmitBtn();
       });

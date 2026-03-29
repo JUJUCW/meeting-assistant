@@ -425,3 +425,16 @@ async def test_create_action_item_missing_priority_returns_422(monkeypatch):
             json={"content": "任務"},
         )
     assert response.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_transcribe_file_too_large_returns_413():
+    oversized = io.BytesIO(b"x" * (200 * 1024 * 1024 + 1))
+    oversized.name = "big.mp3"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/transcribe",
+            files={"file": ("big.mp3", oversized, "audio/mpeg")},
+        )
+    assert response.status_code == 413
+    assert "200 MB" in response.json()["detail"]

@@ -24,6 +24,7 @@ jobs: dict = {}
 jobs_lock = threading.Lock()
 
 ALLOWED_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm"}
+MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB
 
 
 def _run_transcription(job_id: str, file_path: str):
@@ -95,9 +96,12 @@ async def transcribe(file: UploadFile = File(...)):
             status_code=400,
             detail=f"Unsupported format. Allowed: {', '.join(ALLOWED_EXTENSIONS)}",
         )
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="檔案過大，上限為 200 MB。")
     suffix = ext
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(await file.read())
+        tmp.write(content)
         tmp_path = tmp.name
 
     job_id = str(uuid.uuid4())
