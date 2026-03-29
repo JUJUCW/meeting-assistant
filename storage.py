@@ -57,6 +57,88 @@ def list_meetings() -> list[dict]:
     return meetings
 
 
+def search_meetings(query: str) -> list[dict]:
+    if not query:
+        return []
+    q = query.lower()
+    if not MEETINGS_DIR.exists():
+        return []
+    results = []
+    for path in sorted(MEETINGS_DIR.glob("*.json"), reverse=True):
+        try:
+            m = json.loads(path.read_text())
+        except Exception as e:
+            logger.warning("Skipping corrupted meeting file %s: %s", path, e)
+            continue
+
+        hits = []
+
+        # 1. transcript
+        transcript = m.get("transcript", "") or ""
+        idx = transcript.lower().find(q)
+        if idx >= 0:
+            start = max(0, idx - 30)
+            end = min(len(transcript), idx + len(query) + 30)
+            snippet = transcript[start:end]
+            if start > 0:
+                snippet = "…" + snippet
+            if end < len(transcript):
+                snippet = snippet + "…"
+            hits.append({"field": "transcript", "snippet": snippet})
+
+        # 2. decisions（content 或 rationale，取第一筆命中）
+        for d in m.get("decisions", []):
+            matched = False
+            for val in [d.get("content", "") or "", d.get("rationale", "") or ""]:
+                idx = val.lower().find(q)
+                if idx >= 0:
+                    start = max(0, idx - 30)
+                    end = min(len(val), idx + len(query) + 30)
+                    snippet = val[start:end]
+                    if start > 0:
+                        snippet = "…" + snippet
+                    if end < len(val):
+                        snippet = snippet + "…"
+                    hits.append({"field": "decisions", "snippet": snippet})
+                    matched = True
+                    break
+            if matched:
+                break
+
+        # 3. action_items（content 或 assignee，取第一筆命中）
+        for a in m.get("action_items", []):
+            matched = False
+            for val in [a.get("content", "") or "", a.get("assignee", "") or ""]:
+                idx = val.lower().find(q)
+                if idx >= 0:
+                    start = max(0, idx - 30)
+                    end = min(len(val), idx + len(query) + 30)
+                    snippet = val[start:end]
+                    if start > 0:
+                        snippet = "…" + snippet
+                    if end < len(val):
+                        snippet = snippet + "…"
+                    hits.append({"field": "action_items", "snippet": snippet})
+                    matched = True
+                    break
+            if matched:
+                break
+
+        if hits:
+            results.append({
+                "id": m["id"],
+                "created_at": m["created_at"],
+                "decision_count": len(m.get("decisions", [])),
+                "action_item_count": len(m.get("action_items", [])),
+                "pending_action_item_count": sum(
+                    1 for a in m.get("action_items", []) if a.get("status") == "pending"
+                ),
+                "hits": hits,
+            })
+
+    return results
+
+
 def get_pending_action_items() -> list[dict]:
     if not MEETINGS_DIR.exists():
         return []

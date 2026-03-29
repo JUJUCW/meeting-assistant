@@ -257,3 +257,106 @@ def test_add_action_item_raises_on_missing_priority():
     storage.save_meeting(_sample_meeting())
     with pytest.raises(ValueError, match="priority is required"):
         storage.add_action_item("2026-03-28_14-30", {"content": "任務"})
+
+
+def test_search_finds_in_transcript():
+    m = _sample_meeting()
+    storage.save_meeting(m)
+    results = storage.search_meetings("新系統")
+    assert len(results) == 1
+    assert any(h["field"] == "transcript" for h in results[0]["hits"])
+
+
+def test_search_finds_in_decisions_content():
+    m = _sample_meeting()
+    storage.save_meeting(m)
+    results = storage.search_meetings("採用新系統")
+    assert len(results) == 1
+    assert any(h["field"] == "decisions" for h in results[0]["hits"])
+
+
+def test_search_finds_in_decisions_rationale():
+    m = _sample_meeting()
+    storage.save_meeting(m)
+    results = storage.search_meetings("效率")
+    assert len(results) == 1
+    assert any(h["field"] == "decisions" for h in results[0]["hits"])
+
+
+def test_search_finds_in_action_items_content():
+    m = _sample_meeting()
+    storage.save_meeting(m)
+    results = storage.search_meetings("更新文件")
+    assert len(results) == 1
+    assert any(h["field"] == "action_items" for h in results[0]["hits"])
+
+
+def test_search_finds_in_action_items_assignee():
+    m = _sample_meeting()
+    storage.save_meeting(m)
+    results = storage.search_meetings("小明")
+    assert len(results) == 1
+    assert any(h["field"] == "action_items" for h in results[0]["hits"])
+
+
+def test_search_case_insensitive():
+    m = _sample_meeting()
+    m["transcript"] = "今天的Meeting討論了新系統。"
+    storage.save_meeting(m)
+    results = storage.search_meetings("MEETING")
+    assert len(results) == 1
+
+
+def test_search_no_match_returns_empty():
+    storage.save_meeting(_sample_meeting())
+    results = storage.search_meetings("不存在的關鍵字xyz")
+    assert results == []
+
+
+def test_search_empty_query_returns_empty():
+    storage.save_meeting(_sample_meeting())
+    results = storage.search_meetings("")
+    assert results == []
+
+
+def test_search_returns_summary_fields():
+    storage.save_meeting(_sample_meeting())
+    results = storage.search_meetings("新系統")
+    r = results[0]
+    assert r["id"] == "2026-03-28_14-30"
+    assert "created_at" in r
+    assert "decision_count" in r
+    assert "action_item_count" in r
+    assert "pending_action_item_count" in r
+    assert "hits" in r
+
+
+def test_search_snippet_contains_keyword():
+    storage.save_meeting(_sample_meeting())
+    results = storage.search_meetings("新系統")
+    hit = next(h for h in results[0]["hits"] if h["field"] == "transcript")
+    assert "新系統" in hit["snippet"]
+
+
+def test_search_snippet_has_context_ellipsis():
+    m = _sample_meeting()
+    m["transcript"] = "A" * 50 + "新系統" + "B" * 50
+    storage.save_meeting(m)
+    results = storage.search_meetings("新系統")
+    hit = next(h for h in results[0]["hits"] if h["field"] == "transcript")
+    assert hit["snippet"].startswith("…")
+    assert hit["snippet"].endswith("…")
+    assert "新系統" in hit["snippet"]
+
+
+def test_search_corrupted_file_skipped(tmp_path, monkeypatch):
+    monkeypatch.setattr(storage, "MEETINGS_DIR", tmp_path / "meetings")
+    storage.save_meeting(_sample_meeting())
+    (storage.MEETINGS_DIR / "bad.json").write_text("{{not json")
+    results = storage.search_meetings("新系統")
+    assert len(results) == 1
+
+
+def test_search_no_meetings_dir_returns_empty():
+    results = storage.search_meetings("新系統")
+    assert results == []
