@@ -239,3 +239,21 @@ def test_add_action_item_status_cannot_be_overridden():
         "content": "任務", "assignee": "", "deadline": "", "priority": "medium", "status": "overridden"
     })
     assert result["status"] == "pending"
+
+
+def test_add_decision_raises_on_missing_content():
+    storage.save_meeting(_sample_meeting())
+    with pytest.raises(ValueError, match="content is required"):
+        storage.add_decision("2026-03-28_14-30", {"rationale": ""})
+
+
+def test_add_action_item_raises_on_missing_content():
+    storage.save_meeting(_sample_meeting())
+    with pytest.raises(ValueError, match="content is required"):
+        storage.add_action_item("2026-03-28_14-30", {"priority": "medium"})
+
+
+def test_add_action_item_raises_on_missing_priority():
+    storage.save_meeting(_sample_meeting())
+    with pytest.raises(ValueError, match="priority is required"):
+        storage.add_action_item("2026-03-28_14-30", {"content": "任務"})
