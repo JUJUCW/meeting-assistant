@@ -32,7 +32,7 @@ def test_save_and_load_meeting():
 
 
 def test_load_missing_returns_none():
-    assert storage.load_meeting("nonexistent") is None
+    assert storage.load_meeting("2099-01-01_00-00") is None
 
 
 def test_list_meetings_returns_summary():
@@ -75,7 +75,7 @@ def test_resolve_missing_item_returns_false():
 
 
 def test_resolve_missing_meeting_returns_false():
-    assert storage.resolve_action_item("nonexistent", "a-1") is False
+    assert storage.resolve_action_item("2099-01-01_00-00", "a-1") is False
 
 
 def test_corrupted_file_skipped_in_list(tmp_path, monkeypatch):
@@ -93,7 +93,7 @@ def test_delete_meeting_returns_true():
 
 
 def test_delete_meeting_missing_returns_false():
-    assert storage.delete_meeting("nonexistent") is False
+    assert storage.delete_meeting("2099-01-01_00-00") is False
 
 
 def test_update_decision_returns_updated():
@@ -117,7 +117,7 @@ def test_update_decision_missing_returns_none():
 
 
 def test_update_decision_missing_meeting_returns_none():
-    assert storage.update_decision("nonexistent", "d-1", {"content": "x"}) is None
+    assert storage.update_decision("2099-01-01_00-00", "d-1", {"content": "x"}) is None
 
 
 def test_update_action_item_returns_updated():
@@ -141,7 +141,7 @@ def test_update_action_item_missing_returns_none():
 
 
 def test_update_action_item_missing_meeting_returns_none():
-    assert storage.update_action_item("nonexistent", "a-1", {"status": "done"}) is None
+    assert storage.update_action_item("2099-01-01_00-00", "a-1", {"status": "done"}) is None
 
 
 def test_list_meetings_includes_pending_count():
@@ -184,7 +184,7 @@ def test_add_decision_first_item_gets_id_d1():
 
 
 def test_add_decision_missing_meeting_returns_none():
-    assert storage.add_decision("nonexistent", {"content": "x", "rationale": "", "related_people": []}) is None
+    assert storage.add_decision("2099-01-01_00-00", {"content": "x", "rationale": "", "related_people": []}) is None
 
 
 def test_add_action_item_returns_new_item():
@@ -220,7 +220,7 @@ def test_add_action_item_first_item_gets_id_a1():
 
 
 def test_add_action_item_missing_meeting_returns_none():
-    assert storage.add_action_item("nonexistent", {
+    assert storage.add_action_item("2099-01-01_00-00", {
         "content": "x", "assignee": "", "deadline": "", "priority": "medium"
     }) is None
 

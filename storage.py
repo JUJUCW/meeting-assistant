@@ -1,22 +1,31 @@
 # storage.py
 import json
 import logging
+import re
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 MEETINGS_DIR = Path(__file__).parent / "meetings"
+_MEETING_ID_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}$")
+
+
+def _validate_meeting_id(meeting_id: str) -> None:
+    if not _MEETING_ID_RE.match(meeting_id):
+        raise ValueError(f"Invalid meeting_id format: {meeting_id!r}")
 
 
 def save_meeting(meeting: dict) -> None:
     if "id" not in meeting:
         raise ValueError("meeting must have an 'id' field")
+    _validate_meeting_id(meeting["id"])
     MEETINGS_DIR.mkdir(exist_ok=True)
     path = MEETINGS_DIR / f"{meeting['id']}.json"
     path.write_text(json.dumps(meeting, ensure_ascii=False, indent=2))
 
 
 def load_meeting(meeting_id: str) -> dict | None:
+    _validate_meeting_id(meeting_id)
     path = MEETINGS_DIR / f"{meeting_id}.json"
     if not path.exists():
         return None
@@ -69,6 +78,7 @@ def get_pending_action_items() -> list[dict]:
 
 
 def resolve_action_item(meeting_id: str, item_id: str) -> bool:
+    _validate_meeting_id(meeting_id)
     path = MEETINGS_DIR / f"{meeting_id}.json"
     if not path.exists():
         return False
@@ -86,6 +96,7 @@ def resolve_action_item(meeting_id: str, item_id: str) -> bool:
 
 
 def delete_meeting(meeting_id: str) -> bool:
+    _validate_meeting_id(meeting_id)
     path = MEETINGS_DIR / f"{meeting_id}.json"
     if not path.exists():
         return False
@@ -93,7 +104,13 @@ def delete_meeting(meeting_id: str) -> bool:
     return True
 
 
+_DECISION_UPDATABLE = {"content", "rationale", "related_people", "status"}
+_ACTION_ITEM_UPDATABLE = {"content", "assignee", "deadline", "priority", "status"}
+
+
 def update_decision(meeting_id: str, decision_id: str, updates: dict) -> dict | None:
+    _validate_meeting_id(meeting_id)
+    updates = {k: v for k, v in updates.items() if k in _DECISION_UPDATABLE}
     path = MEETINGS_DIR / f"{meeting_id}.json"
     if not path.exists():
         return None
@@ -112,6 +129,8 @@ def update_decision(meeting_id: str, decision_id: str, updates: dict) -> dict | 
 
 
 def update_action_item(meeting_id: str, item_id: str, updates: dict) -> dict | None:
+    _validate_meeting_id(meeting_id)
+    updates = {k: v for k, v in updates.items() if k in _ACTION_ITEM_UPDATABLE}
     path = MEETINGS_DIR / f"{meeting_id}.json"
     if not path.exists():
         return None
@@ -130,6 +149,7 @@ def update_action_item(meeting_id: str, item_id: str, updates: dict) -> dict | N
 
 
 def add_decision(meeting_id: str, data: dict) -> dict | None:
+    _validate_meeting_id(meeting_id)
     path = MEETINGS_DIR / f"{meeting_id}.json"
     if not path.exists():
         return None
@@ -157,6 +177,7 @@ def add_decision(meeting_id: str, data: dict) -> dict | None:
 
 
 def add_action_item(meeting_id: str, data: dict) -> dict | None:
+    _validate_meeting_id(meeting_id)
     path = MEETINGS_DIR / f"{meeting_id}.json"
     if not path.exists():
         return None
