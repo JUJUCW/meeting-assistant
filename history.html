@@ -910,6 +910,9 @@
     let allMeetings = [];
     let allCategories = [];
     let currentMeeting = null;
+    let activeFilter = null; // { type: 'category'|'tag', value: string }
+    let lastSearchQuery = '';
+    let lastSearchResults = null;
     let activeEditorCleanup = null;   // fn to close currently open editor
 
     // ── Server reachability check ──────────────────────────────────────────────
@@ -1088,6 +1091,33 @@
       activePopover = null;
     }
 
+    // ── Filtering ──────────────────────────────────────────────────────────────
+
+    function applyFilters(meetings) {
+      if (!activeFilter) return meetings;
+      if (activeFilter.type === 'category') {
+        return meetings.filter(m => m.category_id === activeFilter.value);
+      }
+      if (activeFilter.type === 'tag') {
+        return meetings.filter(m => (m.tags || []).includes(activeFilter.value));
+      }
+      return meetings;
+    }
+
+    function renderCurrent() {
+      if (lastSearchQuery && lastSearchResults) {
+        renderSearchResults(applyFilters(lastSearchResults), lastSearchQuery);
+      } else {
+        renderList(applyFilters(allMeetings));
+      }
+      document.querySelectorAll('.tag-chip[data-filter-type]').forEach(chip => {
+        const isActive = activeFilter &&
+          chip.dataset.filterType === activeFilter.type &&
+          chip.dataset.filterValue === activeFilter.value;
+        chip.classList.toggle('filter-active', isActive);
+      });
+    }
+
     // ── List View ──────────────────────────────────────────────────────────────
 
     function buildTagChipsHtml(m) {
@@ -1216,6 +1246,18 @@
         return;
       }
 
+      if (action === 'filter-chip') {
+        const type = e.target.dataset.filterType;
+        const value = e.target.dataset.filterValue;
+        if (activeFilter && activeFilter.type === type && activeFilter.value === value) {
+          activeFilter = null;
+        } else {
+          activeFilter = { type, value };
+        }
+        renderCurrent();
+        return;
+      }
+
       if (action === 'open-detail') {
         openDetail(id);
         return;
@@ -1243,7 +1285,7 @@
       try {
         await deleteMeeting(id);
         allMeetings = allMeetings.filter(m => m.id !== id);
-        renderList(allMeetings);
+        renderCurrent();
       } catch (err) {
         console.error('Delete failed:', err);
         const confirmEl = document.getElementById(`delete-confirm-${id}`);
@@ -1751,15 +1793,19 @@
         const debouncedSearch = debounce(async (value) => {
           const query = value.trim();
           if (!query) {
+            lastSearchQuery = '';
+            lastSearchResults = null;
             document.getElementById('empty-state').textContent = '尚無會議紀錄';
-            renderList(allMeetings);
+            renderCurrent();
             return;
           }
           try {
             const r = await fetch(`${API}/meetings/search?q=${encodeURIComponent(query)}`);
             if (!r.ok) throw new Error('search failed');
             const data = await r.json();
-            renderSearchResults(data.meetings || [], query);
+            lastSearchQuery = query;
+            lastSearchResults = data.meetings || [];
+            renderCurrent();
           } catch (err) {
             console.error('Search failed:', err);
           }
