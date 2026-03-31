@@ -217,6 +217,47 @@
       background: rgba(200,160,100,0.07);
     }
 
+    /* ── Tag Chips ── */
+    .card-tags {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    .tag-chip {
+      display: inline-block;
+      padding: 2px 9px;
+      border-radius: 12px;
+      font-size: 12px;
+      cursor: pointer;
+      background: #2a2a2a;
+      color: #aaa;
+      border: 1px solid transparent;
+      transition: opacity 0.15s;
+      user-select: none;
+    }
+    .tag-chip:hover { opacity: 0.8; }
+    .tag-chip.category-chip {
+      background: #1d3a5e;
+      color: #6ab0f5;
+    }
+    .tag-chip.filter-active {
+      outline: 2px solid rgba(212,175,55,0.6);
+      outline-offset: 1px;
+    }
+    .btn-tag-edit {
+      background: none;
+      border: 1px dashed #444;
+      color: #666;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+    }
+    .btn-tag-edit:hover { color: #999; border-color: #666; }
+
     /* ── Search Hits ── */
     .search-hits {
       margin-top: 8px;
@@ -839,6 +880,7 @@
     }
 
     let allMeetings = [];
+    let allCategories = [];
     let currentMeeting = null;
     let activeEditorCleanup = null;   // fn to close currently open editor
 
@@ -891,6 +933,20 @@
 
     // ── List View ──────────────────────────────────────────────────────────────
 
+    function buildTagChipsHtml(m) {
+      const chips = [];
+      if (m.category_id) {
+        const cat = allCategories.find(c => c.id === m.category_id);
+        if (cat) {
+          chips.push(`<span class="tag-chip category-chip" data-action="filter-chip" data-filter-type="category" data-filter-value="${escapeHtml(cat.id)}">${escapeHtml(cat.name)}</span>`);
+        }
+      }
+      (m.tags || []).forEach(t => {
+        chips.push(`<span class="tag-chip" data-action="filter-chip" data-filter-type="tag" data-filter-value="${escapeHtml(t)}">${escapeHtml(t)}</span>`);
+      });
+      return chips.length ? `<div class="card-tags">${chips.join('')}</div>` : '';
+    }
+
     function renderList(meetings) {
       const listEl   = document.getElementById('meeting-list');
       const emptyEl  = document.getElementById('empty-state');
@@ -914,6 +970,7 @@
           <div class="meeting-card-top">
             <div class="meeting-date" data-action="open-detail" data-id="${escapeHtml(m.id)}">${escapeHtml((m.created_at || '').replace('T', ' ').slice(0, 16))}</div>
             <div class="meeting-card-actions">
+              <button class="btn-tag-edit" data-action="open-tag-popover" data-id="${escapeHtml(m.id)}">＋ 標籤</button>
               <button class="btn-edit" data-action="open-detail" data-id="${escapeHtml(m.id)}">查看</button>
               <button class="btn-delete" data-action="show-delete-confirm" data-id="${escapeHtml(m.id)}">刪除</button>
             </div>
@@ -923,6 +980,7 @@
             <span class="badge badge-actions">${m.action_item_count || 0} 行動項目</span>
             ${pendingCount > 0 ? `<span class="badge badge-pending">${pendingCount} 待處理</span>` : ''}
           </div>
+          ${buildTagChipsHtml(m)}
           <div class="delete-confirm" id="delete-confirm-${escapeHtml(m.id)}">
             <span class="delete-confirm-text">確認刪除此會議？</span>
             <button class="btn-confirm-delete" data-action="confirm-delete" data-id="${escapeHtml(m.id)}">確認</button>
@@ -963,6 +1021,7 @@
           <div class="meeting-card-top">
             <div class="meeting-date" data-action="open-detail" data-id="${escapeHtml(m.id)}">${escapeHtml((m.created_at || '').replace('T', ' ').slice(0, 16))}</div>
             <div class="meeting-card-actions">
+              <button class="btn-tag-edit" data-action="open-tag-popover" data-id="${escapeHtml(m.id)}">＋ 標籤</button>
               <button class="btn-edit" data-action="open-detail" data-id="${escapeHtml(m.id)}">查看</button>
               <button class="btn-delete" data-action="show-delete-confirm" data-id="${escapeHtml(m.id)}">刪除</button>
             </div>
@@ -972,6 +1031,7 @@
             <span class="badge badge-actions">${m.action_item_count || 0} 行動項目</span>
             ${pendingCount > 0 ? `<span class="badge badge-pending">${pendingCount} 待處理</span>` : ''}
           </div>
+          ${buildTagChipsHtml(m)}
           ${hitsHtml ? `<div class="search-hits">${hitsHtml}</div>` : ''}
           <div class="delete-confirm" id="delete-confirm-${escapeHtml(m.id)}">
             <span class="delete-confirm-text">確認刪除此會議？</span>
@@ -1515,6 +1575,13 @@
 
       // Load meetings
       try {
+        try {
+          const catData = await fetch(`${API}/categories`).then(r => r.json());
+          allCategories = catData.categories || [];
+        } catch {
+          allCategories = [];
+        }
+
         const data = await fetchMeetings();
         allMeetings = data.meetings || data;
         renderList(allMeetings);
