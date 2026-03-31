@@ -228,3 +228,32 @@ def resolve_action_item(meeting_id: str, item_id: str):
     if not ok:
         raise HTTPException(status_code=404, detail="Item not found")
     return {"status": "done"}
+
+
+@app.get("/categories")
+def list_categories():
+    return {"categories": storage.load_categories()}
+
+
+@app.post("/categories")
+def create_category(body: dict = Body(...)):
+    name = body.get("name", "").strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="name is required")
+    return storage.add_category(name)
+
+
+@app.delete("/categories/{cat_id}")
+def delete_category_endpoint(cat_id: str):
+    ok = storage.delete_category(cat_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return {"status": "deleted"}
+
+
+@app.patch("/meetings/{meeting_id}/tags")
+def patch_meeting_tags(meeting_id: str, body: dict = Body(...)):
+    result = storage.update_meeting_tags(meeting_id, body)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    return result

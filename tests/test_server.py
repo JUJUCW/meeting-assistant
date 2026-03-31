@@ -480,3 +480,60 @@ async def test_search_endpoint_no_match_returns_empty(monkeypatch):
         res = await client.get("/meetings/search?q=notfound")
     assert res.status_code == 200
     assert res.json()["meetings"] == []
+
+
+# ── Categories ──────────────────────────────────────────────────────────────
+
+@pytest.mark.anyio
+async def test_get_categories_returns_list(monkeypatch):
+    monkeypatch.setattr(storage, "load_categories", lambda: [{"id": "cat-1", "name": "週會"}])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.get("/categories")
+    assert r.status_code == 200
+    assert r.json() == {"categories": [{"id": "cat-1", "name": "週會"}]}
+
+
+@pytest.mark.anyio
+async def test_post_category_adds_item(monkeypatch):
+    new_cat = {"id": "cat-abc12345", "name": "新分類"}
+    monkeypatch.setattr(storage, "add_category", lambda name: new_cat)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.post("/categories", json={"name": "新分類"})
+    assert r.status_code == 200
+    assert r.json() == new_cat
+
+
+@pytest.mark.anyio
+async def test_delete_category_success(monkeypatch):
+    monkeypatch.setattr(storage, "delete_category", lambda cat_id: True)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.delete("/categories/cat-1")
+    assert r.status_code == 200
+    assert r.json() == {"status": "deleted"}
+
+
+@pytest.mark.anyio
+async def test_delete_category_not_found(monkeypatch):
+    monkeypatch.setattr(storage, "delete_category", lambda cat_id: False)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.delete("/categories/cat-999")
+    assert r.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_patch_meeting_tags_success(monkeypatch):
+    updated = {"id": "2026-03-28_14-30", "category_id": "cat-2", "tags": ["Q2"],
+               "decisions": [], "action_items": [], "transcript": "", "created_at": "2026-03-28T14:30:00"}
+    monkeypatch.setattr(storage, "update_meeting_tags", lambda mid, updates: updated)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.patch("/meetings/2026-03-28_14-30/tags", json={"category_id": "cat-2", "tags": ["Q2"]})
+    assert r.status_code == 200
+    assert r.json()["category_id"] == "cat-2"
+
+
+@pytest.mark.anyio
+async def test_patch_meeting_tags_not_found(monkeypatch):
+    monkeypatch.setattr(storage, "update_meeting_tags", lambda mid, updates: None)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.patch("/meetings/2099-01-01_00-00/tags", json={"tags": []})
+    assert r.status_code == 404
