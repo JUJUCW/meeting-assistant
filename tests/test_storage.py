@@ -401,3 +401,36 @@ def test_delete_category_returns_true(tmp_categories):
 
 def test_delete_category_missing_returns_false(tmp_categories):
     assert storage.delete_category("cat-999") is False
+
+
+def test_update_meeting_tags_persists():
+    storage.save_meeting(_sample_meeting())
+    result = storage.update_meeting_tags("2026-03-28_14-30", {"category_id": "cat-2", "tags": ["Q2"]})
+    assert result is not None
+    loaded = storage.load_meeting("2026-03-28_14-30")
+    assert loaded["category_id"] == "cat-2"
+    assert loaded["tags"] == ["Q2"]
+
+
+def test_update_meeting_tags_partial_category_only():
+    m = _sample_meeting()
+    m["tags"] = ["existing"]
+    storage.save_meeting(m)
+    storage.update_meeting_tags("2026-03-28_14-30", {"category_id": "cat-3"})
+    loaded = storage.load_meeting("2026-03-28_14-30")
+    assert loaded["category_id"] == "cat-3"
+    assert loaded["tags"] == ["existing"]
+
+
+def test_update_meeting_tags_partial_tags_only():
+    m = _sample_meeting()
+    m["category_id"] = "cat-1"
+    storage.save_meeting(m)
+    storage.update_meeting_tags("2026-03-28_14-30", {"tags": ["new"]})
+    loaded = storage.load_meeting("2026-03-28_14-30")
+    assert loaded["category_id"] == "cat-1"
+    assert loaded["tags"] == ["new"]
+
+
+def test_update_meeting_tags_missing_meeting_returns_none():
+    assert storage.update_meeting_tags("2099-01-01_00-00", {"tags": []}) is None

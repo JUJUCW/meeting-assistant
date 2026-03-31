@@ -226,6 +226,26 @@ def delete_category(cat_id: str) -> bool:
     return True
 
 
+_MEETING_TAGS_UPDATABLE = {"category_id", "tags"}
+
+
+def update_meeting_tags(meeting_id: str, updates: dict) -> dict | None:
+    _validate_meeting_id(meeting_id)
+    updates = {k: v for k, v in updates.items() if k in _MEETING_TAGS_UPDATABLE}
+    path = MEETINGS_DIR / f"{meeting_id}.json"
+    if not path.exists():
+        return None
+    try:
+        m = json.loads(path.read_text())
+        for k, v in updates.items():
+            m[k] = v
+        path.write_text(json.dumps(m, ensure_ascii=False, indent=2))
+        return m
+    except Exception as e:
+        logger.warning("Error updating tags for %s: %s", meeting_id, e)
+        return None
+
+
 _DECISION_UPDATABLE = {"content", "rationale", "related_people", "status"}
 _ACTION_ITEM_UPDATABLE = {"content", "assignee", "deadline", "priority", "status"}
 
