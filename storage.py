@@ -2,12 +2,21 @@
 import json
 import logging
 import re
+import uuid
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 MEETINGS_DIR = Path(__file__).parent / "meetings"
+CATEGORIES_PATH = Path(__file__).parent / "categories.json"
 _MEETING_ID_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}$")
+
+_DEFAULT_CATEGORIES = [
+    {"id": "cat-1", "name": "週會"},
+    {"id": "cat-2", "name": "產品"},
+    {"id": "cat-3", "name": "一對一"},
+    {"id": "cat-4", "name": "全員會議"},
+]
 
 
 def _validate_meeting_id(meeting_id: str) -> None:
@@ -183,6 +192,37 @@ def delete_meeting(meeting_id: str) -> bool:
     if not path.exists():
         return False
     path.unlink()
+    return True
+
+
+def load_categories() -> list[dict]:
+    if not CATEGORIES_PATH.exists():
+        save_categories(_DEFAULT_CATEGORIES)
+        return list(_DEFAULT_CATEGORIES)
+    try:
+        return json.loads(CATEGORIES_PATH.read_text())
+    except Exception:
+        return list(_DEFAULT_CATEGORIES)
+
+
+def save_categories(categories: list[dict]) -> None:
+    CATEGORIES_PATH.write_text(json.dumps(categories, ensure_ascii=False, indent=2))
+
+
+def add_category(name: str) -> dict:
+    cats = load_categories()
+    new_cat = {"id": f"cat-{uuid.uuid4().hex[:8]}", "name": name}
+    cats.append(new_cat)
+    save_categories(cats)
+    return new_cat
+
+
+def delete_category(cat_id: str) -> bool:
+    cats = load_categories()
+    new_cats = [c for c in cats if c["id"] != cat_id]
+    if len(new_cats) == len(cats):
+        return False
+    save_categories(new_cats)
     return True
 
 

@@ -360,3 +360,44 @@ def test_search_corrupted_file_skipped(tmp_path, monkeypatch):
 def test_search_no_meetings_dir_returns_empty():
     results = storage.search_meetings("新系統")
     assert results == []
+
+
+# ── Categories ─────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def tmp_categories(tmp_path, monkeypatch):
+    monkeypatch.setattr(storage, "CATEGORIES_PATH", tmp_path / "categories.json")
+
+
+def test_load_categories_returns_defaults(tmp_categories):
+    cats = storage.load_categories()
+    assert len(cats) == 4
+    assert all("id" in c and "name" in c for c in cats)
+
+
+def test_load_categories_returns_saved(tmp_categories):
+    storage.save_categories([{"id": "cat-x", "name": "測試"}])
+    cats = storage.load_categories()
+    assert cats == [{"id": "cat-x", "name": "測試"}]
+
+
+def test_add_category_returns_new_item(tmp_categories):
+    result = storage.add_category("新分類")
+    assert result["name"] == "新分類"
+    assert result["id"].startswith("cat-")
+
+
+def test_add_category_persists(tmp_categories):
+    storage.add_category("新分類")
+    cats = storage.load_categories()
+    assert any(c["name"] == "新分類" for c in cats)
+
+
+def test_delete_category_returns_true(tmp_categories):
+    storage.save_categories([{"id": "cat-1", "name": "週會"}])
+    assert storage.delete_category("cat-1") is True
+    assert storage.load_categories() == []
+
+
+def test_delete_category_missing_returns_false(tmp_categories):
+    assert storage.delete_category("cat-999") is False
