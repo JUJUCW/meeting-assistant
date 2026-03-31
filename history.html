@@ -271,6 +271,34 @@
       letter-spacing: 0.04em;
     }
 
+    /* ── Tag Popover ── */
+    .tag-popover {
+      position: fixed;
+      background: #1e1e1e;
+      border: 1px solid #3a3a3a;
+      border-radius: 8px;
+      padding: 14px;
+      width: 280px;
+      z-index: 1000;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+    }
+    .tag-popover-label {
+      font-size: 11px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+    .tag-popover-section { margin-bottom: 12px; }
+    .tag-popover-section:last-child { margin-bottom: 0; }
+    .tag-popover-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .tag-popover-input {
+      width: 100%;
+      box-sizing: border-box;
+      font-size: 12px;
+      padding: 5px 8px;
+    }
+
     /* ── Delete Inline Confirm ── */
     .btn-delete {
       font-family: var(--font-body);
@@ -931,6 +959,135 @@
       return r.json();
     }
 
+    // ── Tag Popover ────────────────────────────────────────────────────────────
+
+    let activePopover = null; // { meetingId, selectedCategoryId, selectedTags, el }
+
+    function openTagPopover(meetingId, anchorEl) {
+      closeTagPopover(false);
+      const meeting = allMeetings.find(m => m.id === meetingId);
+      if (!meeting) return;
+
+      const el = document.createElement('div');
+      el.className = 'tag-popover';
+      el.id = 'tag-popover';
+
+      activePopover = {
+        meetingId,
+        selectedCategoryId: meeting.category_id || null,
+        selectedTags: [...(meeting.tags || [])],
+        el,
+      };
+
+      function render() {
+        const catChips = allCategories.map(c => {
+          const isSelected = activePopover.selectedCategoryId === c.id;
+          return `<span class="tag-chip category-chip${isSelected ? ' filter-active' : ''}" data-popover-cat="${escapeHtml(c.id)}" style="cursor:pointer;">${escapeHtml(c.name)}</span>`;
+        }).join('');
+
+        const tagChips = activePopover.selectedTags.map(t =>
+          `<span class="tag-chip filter-active" data-popover-tag="${escapeHtml(t)}" style="cursor:pointer;">${escapeHtml(t)} ✕</span>`
+        ).join('');
+
+        el.innerHTML = `
+          <div class="tag-popover-section">
+            <div class="tag-popover-label">分類</div>
+            <div class="tag-popover-chips">${catChips}</div>
+          </div>
+          <div class="tag-popover-section">
+            <div class="tag-popover-label">標籤</div>
+            <div class="tag-popover-chips">${tagChips}</div>
+            <input class="form-input tag-popover-input" placeholder="輸入新標籤後按 Enter…">
+          </div>
+        `;
+
+        el.querySelectorAll('[data-popover-cat]').forEach(chip => {
+          chip.addEventListener('click', () => {
+            const catId = chip.dataset.popoverCat;
+            activePopover.selectedCategoryId = activePopover.selectedCategoryId === catId ? null : catId;
+            render();
+          });
+        });
+
+        el.querySelectorAll('[data-popover-tag]').forEach(chip => {
+          chip.addEventListener('click', () => {
+            const tag = chip.dataset.popoverTag;
+            activePopover.selectedTags = activePopover.selectedTags.filter(t => t !== tag);
+            render();
+          });
+        });
+
+        const input = el.querySelector('.tag-popover-input');
+        if (input) {
+          input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+              const val = input.value.trim();
+              if (val && !activePopover.selectedTags.includes(val)) {
+                activePopover.selectedTags.push(val);
+              }
+              render();
+            }
+          });
+        }
+      }
+
+      render();
+      document.body.appendChild(el);
+
+      const rect = anchorEl.getBoundingClientRect();
+      const top = rect.bottom + window.scrollY + 6;
+      const left = Math.min(rect.left + window.scrollX, window.innerWidth - 296);
+      el.style.top = `${top}px`;
+      el.style.left = `${left}px`;
+
+      setTimeout(() => {
+        document.addEventListener('click', outsideClickHandler);
+        document.addEventListener('keydown', escKeyHandler);
+      }, 0);
+    }
+
+    function outsideClickHandler(e) {
+      if (activePopover && !activePopover.el.contains(e.target)) {
+        closeTagPopover(true);
+      }
+    }
+
+    function escKeyHandler(e) {
+      if (e.key === 'Escape' && activePopover) {
+        closeTagPopover(true);
+      }
+    }
+
+    async function closeTagPopover(save) {
+      if (!activePopover) return;
+      document.removeEventListener('click', outsideClickHandler);
+      document.removeEventListener('keydown', escKeyHandler);
+
+      if (save) {
+        const { meetingId, selectedCategoryId, selectedTags } = activePopover;
+        try {
+          const r = await fetch(`${API}/meetings/${encodeURIComponent(meetingId)}/tags`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category_id: selectedCategoryId, tags: selectedTags }),
+          });
+          if (r.ok) {
+            const idx = allMeetings.findIndex(m => m.id === meetingId);
+            if (idx >= 0) {
+              allMeetings[idx].category_id = selectedCategoryId;
+              allMeetings[idx].tags = selectedTags;
+            }
+            renderCurrent();
+          }
+        } catch (err) {
+          console.error('Save tags failed:', err);
+        }
+      }
+
+      activePopover.el.remove();
+      activePopover = null;
+    }
+
     // ── List View ──────────────────────────────────────────────────────────────
 
     function buildTagChipsHtml(m) {
@@ -1053,6 +1210,11 @@
       if (!action) return;
 
       const id = e.target.dataset.id;
+
+      if (action === 'open-tag-popover') {
+        openTagPopover(id, e.target);
+        return;
+      }
 
       if (action === 'open-detail') {
         openDetail(id);
