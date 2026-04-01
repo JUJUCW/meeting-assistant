@@ -1,0 +1,14 @@
+/* ── Design Tokens ── */
+:root {
+  --bg:               #0A0A0A;
+  --card-bg:          #141414;
+  --gold:             #D4AF37;
+  --gold-dim:         rgba(212,175,55,0.3);
+  --gold-glow:        0 0 15px rgba(212,175,55,0.2);
+  --gold-glow-strong: 0 0 22px rgba(212,175,55,0.45);
+  --cream:            #F2F0E4;
+  --muted:            #888888;
+  --font-display:     'Marcellus', serif;
+  --font-body:        'Josefin Sans', sans-serif;
+  --font-mono:        'Josefin Sans', sans-serif;
+}

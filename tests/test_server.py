@@ -537,3 +537,104 @@ async def test_patch_meeting_tags_not_found(monkeypatch):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.patch("/meetings/2099-01-01_00-00/tags", json={"tags": []})
     assert r.status_code == 404
+
+
+# ── UAT-style flow tests (real storage, no mocks) ──────────────────────────
+
+@pytest.fixture
+def tmp_storage(tmp_path, monkeypatch):
+    monkeypatch.setattr(storage, "MEETINGS_DIR", tmp_path / "meetings")
+    monkeypatch.setattr(storage, "CATEGORIES_PATH", tmp_path / "categories.json")
+
+
+def _make_meeting(mid="2026-03-28_14-30"):
+    return {
+        "id": mid,
+        "created_at": "2026-03-28T14:30:00",
+        "transcript": "今天決定採用新系統",
+        "decisions": [],
+        "action_items": [],
+    }
+
+
+@pytest.mark.anyio
+async def test_patch_tags_then_list_includes_tags(tmp_storage):
+    """PATCH tags → GET /meetings 回傳的摘要帶 tags 欄位。"""
+    mid = "2026-03-28_14-30"
+    storage.save_meeting(_make_meeting(mid))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.patch(f"/meetings/{mid}/tags", json={"tags": ["Q2", "重要"]})
+        assert r.status_code == 200
+
+        r = await client.get("/meetings")
+        meeting = r.json()["meetings"][0]
+        assert meeting["tags"] == ["Q2", "重要"]
+        assert meeting["category_id"] is None
+
+
+@pytest.mark.anyio
+async def test_patch_tags_then_get_meeting_persists(tmp_storage):
+    """PATCH tags → GET /meetings/{id} 能讀回完整 tags。"""
+    mid = "2026-03-28_14-30"
+    storage.save_meeting(_make_meeting(mid))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        await client.patch(f"/meetings/{mid}/tags", json={"tags": ["test-tag"]})
+        r = await client.get(f"/meetings/{mid}")
+        assert r.json()["tags"] == ["test-tag"]
+
+
+@pytest.mark.anyio
+async def test_patch_tags_then_search_includes_tags(tmp_storage):
+    """PATCH tags → GET /meetings/search 回傳的結果帶 tags 欄位。"""
+    mid = "2026-03-28_14-30"
+    storage.save_meeting(_make_meeting(mid))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        await client.patch(f"/meetings/{mid}/tags", json={"tags": ["Q2"]})
+        r = await client.get("/meetings/search?q=新系統")
+        result = r.json()["meetings"][0]
+        assert result["tags"] == ["Q2"]
+
+
+@pytest.mark.anyio
+async def test_category_create_assign_list(tmp_storage):
+    """POST /categories → PATCH tags → GET /meetings 帶 category_id。"""
+    mid = "2026-03-28_14-30"
+    storage.save_meeting(_make_meeting(mid))
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.post("/categories", json={"name": "週會"})
+        assert r.status_code == 200
+        cat_id = r.json()["id"]
+
+        await client.patch(f"/meetings/{mid}/tags", json={"category_id": cat_id})
+
+        r = await client.get("/meetings")
+        assert r.json()["meetings"][0]["category_id"] == cat_id
+
+
+@pytest.mark.anyio
+async def test_patch_tags_clears_existing_tags(tmp_storage):
+    """送空 tags 陣列會清除舊標籤。"""
+    mid = "2026-03-28_14-30"
+    m = _make_meeting(mid)
+    m["tags"] = ["old-tag"]
+    storage.save_meeting(m)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        await client.patch(f"/meetings/{mid}/tags", json={"tags": []})
+        r = await client.get(f"/meetings/{mid}")
+        assert r.json()["tags"] == []
+
+
+@pytest.mark.anyio
+async def test_post_category_empty_name_returns_422(tmp_storage):
+    """空白分類名稱應回傳 422。"""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.post("/categories", json={"name": "  "})
+    assert r.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_patch_tags_missing_meeting_returns_404(tmp_storage):
+    """對不存在的會議 PATCH tags 應回傳 404（真實 storage 驗證）。"""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.patch("/meetings/2099-01-01_00-00/tags", json={"tags": ["x"]})
+    assert r.status_code == 404

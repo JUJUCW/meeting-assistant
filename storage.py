@@ -59,6 +59,8 @@ def list_meetings() -> list[dict]:
                 "pending_action_item_count": sum(
                     1 for a in m.get("action_items", []) if a.get("status") == "pending"
                 ),
+                "category_id": m.get("category_id"),
+                "tags": m.get("tags", []),
             })
         except Exception as e:
             logger.warning("Skipping corrupted meeting file %s: %s", path, e)
@@ -142,6 +144,8 @@ def search_meetings(query: str) -> list[dict]:
                 "pending_action_item_count": sum(
                     1 for a in m.get("action_items", []) if a.get("status") == "pending"
                 ),
+                "category_id": m.get("category_id"),
+                "tags": m.get("tags", []),
                 "hits": hits,
             })
 
@@ -227,6 +231,21 @@ def delete_category(cat_id: str) -> bool:
 
 
 _MEETING_TAGS_UPDATABLE = {"category_id", "tags"}
+
+
+def update_meeting_title(meeting_id: str, title: str) -> dict | None:
+    _validate_meeting_id(meeting_id)
+    path = MEETINGS_DIR / f"{meeting_id}.json"
+    if not path.exists():
+        return None
+    try:
+        m = json.loads(path.read_text())
+        m["title"] = title
+        path.write_text(json.dumps(m, ensure_ascii=False, indent=2))
+        return m
+    except Exception as e:
+        logger.warning("Error updating title for %s: %s", meeting_id, e)
+        return None
 
 
 def update_meeting_tags(meeting_id: str, updates: dict) -> dict | None:

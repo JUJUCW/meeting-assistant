@@ -377,13 +377,66 @@
     #back-btn:hover { opacity: 1; }
 
     #detail-date {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--gold-dim);
+      letter-spacing: 0.12em;
+      margin-bottom: 8px;
+    }
+
+    #detail-title {
       font-family: var(--font-display);
-      font-size: 28px;
+      font-size: 24px;
       font-weight: 400;
       color: var(--cream);
-      letter-spacing: 0.1em;
-      margin-bottom: 36px;
-      text-align: center;
+      letter-spacing: 0.08em;
+      cursor: text;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.2s;
+      min-width: 200px;
+    }
+    #detail-title:hover { border-bottom-color: var(--gold-dim); }
+
+    #detail-title-input {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 400;
+      color: var(--cream);
+      letter-spacing: 0.08em;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid var(--gold);
+      outline: none;
+      width: 100%;
+      min-width: 200px;
+      padding: 0;
+    }
+
+    .meeting-title {
+      font-size: 15px;
+      color: var(--cream);
+      letter-spacing: 0.04em;
+      cursor: text;
+      margin-bottom: 12px;
+      border-bottom: 1px solid transparent;
+      display: inline-block;
+      transition: border-color 0.2s;
+    }
+    .meeting-title:hover { border-bottom-color: var(--gold-dim); }
+    .meeting-title:empty::before { content: '未命名會議'; color: var(--gold-dim); }
+
+    .meeting-title-input {
+      font-size: 15px;
+      color: var(--cream);
+      letter-spacing: 0.04em;
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid var(--gold);
+      outline: none;
+      width: 100%;
+      padding: 0;
+      margin-bottom: 12px;
+      display: block;
     }
 
     .section-heading {
@@ -711,9 +764,12 @@
     <!-- Detail View -->
     <div id="detail-view">
       <button id="back-btn">← 返回列表</button>
-      <div id="detail-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:36px;">
-        <div id="detail-date" style="margin-bottom:0;text-align:left;"></div>
-        <div style="display:flex;gap:10px;">
+      <div id="detail-header" style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:36px;gap:16px;">
+        <div>
+          <div id="detail-date"></div>
+          <div id="detail-title"></div>
+        </div>
+        <div style="display:flex;gap:10px;flex-shrink:0;">
           <button class="btn-edit" id="export-md-btn">匯出 MD</button>
           <button class="btn-edit" id="export-json-btn">匯出 JSON</button>
         </div>
@@ -942,6 +998,73 @@
       if (!r.ok) throw new Error('delete failed');
     }
 
+    async function patchTitle(meetingId, title) {
+      const r = await fetch(`${API}/meetings/${meetingId}/title`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title })
+      });
+      if (!r.ok) throw new Error('patch title failed');
+      return r.json();
+    }
+
+    function startInlineTitleEdit(el, meetingId, onSave) {
+      const original = el.textContent;
+      const input = document.createElement('input');
+      input.className = el.id === 'detail-title' ? '' : 'meeting-title-input';
+      if (el.id === 'detail-title') {
+        input.id = 'detail-title-input';
+      }
+      input.value = original;
+      el.replaceWith(input);
+      input.focus();
+      input.select();
+
+      let saved = false;
+      async function save() {
+        if (saved) return;
+        saved = true;
+        const newTitle = input.value.trim();
+        const span = document.createElement(el.tagName === 'DIV' ? 'div' : 'div');
+        span.className = el.className;
+        if (el.id) span.id = el.id;
+        if (el.dataset.id) span.dataset.id = el.dataset.id;
+        span.textContent = newTitle;
+        input.replaceWith(span);
+        if (newTitle !== original) {
+          try {
+            await patchTitle(meetingId, newTitle);
+            onSave(newTitle);
+          } catch (_) {
+            span.textContent = original;
+          }
+        }
+        span.addEventListener('click', () => startInlineTitleEdit(span, meetingId, onSave));
+      }
+
+      input.addEventListener('blur', save);
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { saved = true; const span = document.createElement('div'); span.className = el.className; if (el.id) span.id = el.id; if (el.dataset.id) span.dataset.id = el.dataset.id; span.textContent = original; input.replaceWith(span); span.addEventListener('click', () => startInlineTitleEdit(span, meetingId, onSave)); }
+      });
+    }
+
+    function setupDetailTitleEdit(meeting) {
+      const el = document.getElementById('detail-title');
+      el.textContent = meeting.title || '';
+      el.onclick = null;
+      el.addEventListener('click', function handler() {
+        el.removeEventListener('click', handler);
+        startInlineTitleEdit(el, meeting.id, newTitle => {
+          meeting.title = newTitle;
+          const idx = allMeetings.findIndex(m => m.id === meeting.id);
+          if (idx >= 0) allMeetings[idx].title = newTitle;
+          const card = document.querySelector(`.meeting-title[data-id="${escapeHtml(meeting.id)}"]`);
+          if (card) card.textContent = newTitle;
+        });
+      });
+    }
+
     async function patchDecision(meetingId, decisionId, body) {
       const r = await fetch(`${API}/meetings/${meetingId}/decisions/${decisionId}`, {
         method: 'PATCH',
@@ -966,6 +1089,24 @@
 
     let activePopover = null; // { meetingId, selectedCategoryId, selectedTags, el }
 
+    function _refreshPopoverChips() {
+      if (!activePopover) return;
+      const p = activePopover;
+      const catEl = p.el.querySelector('#pop-cat-chips');
+      const tagEl = p.el.querySelector('#pop-tag-chips');
+      if (catEl) {
+        catEl.innerHTML = allCategories.map(c => {
+          const sel = p.selectedCategoryId === c.id;
+          return `<span class="tag-chip category-chip${sel ? ' filter-active' : ''}" data-pop-cat="${escapeHtml(c.id)}" style="cursor:pointer">${escapeHtml(c.name)}</span>`;
+        }).join('');
+      }
+      if (tagEl) {
+        tagEl.innerHTML = p.selectedTags.map(t =>
+          `<span class="tag-chip filter-active" data-pop-tag="${escapeHtml(t)}" style="cursor:pointer">${escapeHtml(t)} ✕</span>`
+        ).join('');
+      }
+    }
+
     function openTagPopover(meetingId, anchorEl) {
       closeTagPopover(false);
       const meeting = allMeetings.find(m => m.id === meetingId);
@@ -973,7 +1114,6 @@
 
       const el = document.createElement('div');
       el.className = 'tag-popover';
-      el.id = 'tag-popover';
 
       activePopover = {
         meetingId,
@@ -982,66 +1122,90 @@
         el,
       };
 
-      function render() {
-        const catChips = allCategories.map(c => {
-          const isSelected = activePopover.selectedCategoryId === c.id;
-          return `<span class="tag-chip category-chip${isSelected ? ' filter-active' : ''}" data-popover-cat="${escapeHtml(c.id)}" style="cursor:pointer;">${escapeHtml(c.name)}</span>`;
-        }).join('');
+      el.innerHTML = `
+        <div class="tag-popover-section">
+          <div class="tag-popover-label">分類</div>
+          <div id="pop-cat-chips" class="tag-popover-chips"></div>
+          <input id="pop-new-cat" class="form-input tag-popover-input" placeholder="新增分類後按 Enter…">
+        </div>
+        <div class="tag-popover-section">
+          <div class="tag-popover-label">標籤</div>
+          <div id="pop-tag-chips" class="tag-popover-chips"></div>
+          <input id="pop-new-tag" class="form-input tag-popover-input" placeholder="輸入新標籤後按 Enter…">
+        </div>
+        <div style="text-align:right;margin-top:10px">
+          <button id="pop-save" class="btn-edit" style="font-size:12px;padding:4px 14px">儲存</button>
+        </div>
+      `;
 
-        const tagChips = activePopover.selectedTags.map(t =>
-          `<span class="tag-chip filter-active" data-popover-tag="${escapeHtml(t)}" style="cursor:pointer;">${escapeHtml(t)} ✕</span>`
-        ).join('');
-
-        el.innerHTML = `
-          <div class="tag-popover-section">
-            <div class="tag-popover-label">分類</div>
-            <div class="tag-popover-chips">${catChips}</div>
-          </div>
-          <div class="tag-popover-section">
-            <div class="tag-popover-label">標籤</div>
-            <div class="tag-popover-chips">${tagChips}</div>
-            <input class="form-input tag-popover-input" placeholder="輸入新標籤後按 Enter…">
-          </div>
-        `;
-
-        el.querySelectorAll('[data-popover-cat]').forEach(chip => {
-          chip.addEventListener('click', () => {
-            const catId = chip.dataset.popoverCat;
-            activePopover.selectedCategoryId = activePopover.selectedCategoryId === catId ? null : catId;
-            render();
-          });
-        });
-
-        el.querySelectorAll('[data-popover-tag]').forEach(chip => {
-          chip.addEventListener('click', () => {
-            const tag = chip.dataset.popoverTag;
-            activePopover.selectedTags = activePopover.selectedTags.filter(t => t !== tag);
-            render();
-          });
-        });
-
-        const input = el.querySelector('.tag-popover-input');
-        if (input) {
-          input.addEventListener('keydown', e => {
-            if (e.key === 'Enter') {
-              const val = input.value.trim();
-              if (val && !activePopover.selectedTags.includes(val)) {
-                activePopover.selectedTags.push(val);
-              }
-              render();
-            }
-          });
-        }
-      }
-
-      render();
+      _refreshPopoverChips();
       document.body.appendChild(el);
 
+      // Click delegation for chips and save button
+      el.addEventListener('click', e => {
+        const catId = e.target.dataset.popCat;
+        if (catId !== undefined) {
+          activePopover.selectedCategoryId = activePopover.selectedCategoryId === catId ? null : catId;
+          _refreshPopoverChips();
+          return;
+        }
+        const tag = e.target.dataset.popTag;
+        if (tag !== undefined) {
+          activePopover.selectedTags = activePopover.selectedTags.filter(t => t !== tag);
+          _refreshPopoverChips();
+          return;
+        }
+        if (e.target.id === 'pop-save') {
+          closeTagPopover(true);
+        }
+      });
+
+      // Direct listener on tag input
+      const tagInput = el.querySelector('#pop-new-tag');
+      tagInput.addEventListener('keydown', e => {
+        if (e.key !== 'Enter' || e.isComposing) return;
+        e.preventDefault();
+        const val = tagInput.value.trim();
+        if (val && !activePopover.selectedTags.includes(val)) {
+          activePopover.selectedTags.push(val);
+          tagInput.value = '';
+          _refreshPopoverChips();
+        }
+      });
+
+      // Direct listener on category input
+      const catInput = el.querySelector('#pop-new-cat');
+      catInput.addEventListener('keydown', async e => {
+        if (e.key !== 'Enter' || e.isComposing) return;
+        e.preventDefault();
+        const val = catInput.value.trim();
+        if (!val) return;
+        try {
+          const r = await fetch(`${API}/categories`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: val }),
+          });
+          if (r.ok) {
+            const newCat = await r.json();
+            allCategories.push(newCat);
+            if (activePopover) {
+              activePopover.selectedCategoryId = newCat.id;
+              catInput.value = '';
+              _refreshPopoverChips();
+            }
+          }
+        } catch (err) {
+          console.error('Add category failed:', err);
+        }
+      });
+
+      // Auto-focus tag input
+      setTimeout(() => tagInput.focus(), 0);
+
       const rect = anchorEl.getBoundingClientRect();
-      const top = rect.bottom + window.scrollY + 6;
-      const left = Math.min(rect.left + window.scrollX, window.innerWidth - 296);
-      el.style.top = `${top}px`;
-      el.style.left = `${left}px`;
+      el.style.top = `${rect.bottom + 6}px`;
+      el.style.left = `${Math.min(rect.left, window.innerWidth - 296)}px`;
 
       setTimeout(() => {
         document.addEventListener('click', outsideClickHandler);
@@ -1057,7 +1221,7 @@
 
     function escKeyHandler(e) {
       if (e.key === 'Escape' && activePopover) {
-        closeTagPopover(true);
+        closeTagPopover(false);
       }
     }
 
@@ -1065,30 +1229,39 @@
       if (!activePopover) return;
       document.removeEventListener('click', outsideClickHandler);
       document.removeEventListener('keydown', escKeyHandler);
-
-      if (save) {
-        const { meetingId, selectedCategoryId, selectedTags } = activePopover;
-        try {
-          const r = await fetch(`${API}/meetings/${encodeURIComponent(meetingId)}/tags`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ category_id: selectedCategoryId, tags: selectedTags }),
-          });
-          if (r.ok) {
-            const idx = allMeetings.findIndex(m => m.id === meetingId);
-            if (idx >= 0) {
-              allMeetings[idx].category_id = selectedCategoryId;
-              allMeetings[idx].tags = selectedTags;
-            }
-            renderCurrent();
-          }
-        } catch (err) {
-          console.error('Save tags failed:', err);
-        }
-      }
-
-      activePopover.el.remove();
+      const { meetingId, selectedCategoryId, selectedTags, el } = activePopover;
       activePopover = null;
+      el.remove();
+
+      if (!save) return;
+
+      try {
+        const r = await fetch(`${API}/meetings/${encodeURIComponent(meetingId)}/tags`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category_id: selectedCategoryId, tags: selectedTags }),
+        });
+        if (r.ok) {
+          const idx = allMeetings.findIndex(m => m.id === meetingId);
+          if (idx >= 0) {
+            allMeetings[idx].category_id = selectedCategoryId;
+            allMeetings[idx].tags = selectedTags;
+          }
+          if (lastSearchResults) {
+            const sIdx = lastSearchResults.findIndex(m => m.id === meetingId);
+            if (sIdx >= 0) {
+              lastSearchResults[sIdx].category_id = selectedCategoryId;
+              lastSearchResults[sIdx].tags = [...selectedTags];
+            }
+          }
+          renderCurrent();
+        } else {
+          alert(`儲存失敗（${r.status}）：伺服器找不到此會議，請重新整理頁面再試。`);
+        }
+      } catch (err) {
+        console.error('Save tags failed:', err);
+        alert('儲存失敗：無法連線到伺服器。');
+      }
     }
 
     // ── Filtering ──────────────────────────────────────────────────────────────
@@ -1162,6 +1335,7 @@
               <button class="btn-delete" data-action="show-delete-confirm" data-id="${escapeHtml(m.id)}">刪除</button>
             </div>
           </div>
+          <div class="meeting-title" data-id="${escapeHtml(m.id)}">${escapeHtml(m.title || '')}</div>
           <div class="badges">
             <span class="badge badge-decisions">${m.decision_count || 0} 決議</span>
             <span class="badge badge-actions">${m.action_item_count || 0} 行動項目</span>
@@ -1213,6 +1387,7 @@
               <button class="btn-delete" data-action="show-delete-confirm" data-id="${escapeHtml(m.id)}">刪除</button>
             </div>
           </div>
+          <div class="meeting-title" data-id="${escapeHtml(m.id)}">${escapeHtml(m.title || '')}</div>
           <div class="badges">
             <span class="badge badge-decisions">${m.decision_count || 0} 決議</span>
             <span class="badge badge-actions">${m.action_item_count || 0} 行動項目</span>
@@ -1233,6 +1408,18 @@
     function attachListEvents() {
       const listEl = document.getElementById('meeting-list');
       listEl.addEventListener('click', handleListClick);
+      listEl.addEventListener('click', handleTitleClick);
+    }
+
+    function handleTitleClick(e) {
+      const el = e.target.closest('.meeting-title');
+      if (!el || el.tagName === 'INPUT') return;
+      const meetingId = el.dataset.id;
+      if (!meetingId) return;
+      startInlineTitleEdit(el, meetingId, newTitle => {
+        const m = allMeetings.find(x => x.id === meetingId);
+        if (m) m.title = newTitle;
+      });
     }
 
     function handleListClick(e) {
@@ -1327,6 +1514,7 @@
         document.getElementById('detail-view').style.display = 'block';
 
         document.getElementById('detail-date').textContent = meeting.date || meeting.created_at?.replace('T', ' ').slice(0, 16) || '';
+        setupDetailTitleEdit(meeting);
         document.getElementById('export-md-btn').onclick = () => exportMarkdown(meeting);
         document.getElementById('export-json-btn').onclick = () => exportJson(meeting);
 

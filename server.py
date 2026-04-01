@@ -7,6 +7,7 @@ from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 import whisper
+import opencc
 import analyzer
 import storage
 
@@ -31,10 +32,11 @@ def _run_transcription(job_id: str, file_path: str):
     with jobs_lock:
         jobs[job_id]["status"] = "processing"
     try:
-        model = whisper.load_model("base")
-        result = model.transcribe(file_path, language="zh")
+        model = whisper.load_model("turbo")
+        result = model.transcribe(file_path, language="zh", initial_prompt="以下是繁體中文的會議記錄。")
+        converter = opencc.OpenCC('s2t')
         segments = [
-            {"id": i, "text": seg["text"].strip(), "tag": None}
+            {"id": i, "text": converter.convert(seg["text"].strip()), "tag": None}
             for i, seg in enumerate(result["segments"])
         ]
 
@@ -232,7 +234,7 @@ def resolve_action_item(meeting_id: str, item_id: str):
 
 @app.get("/categories")
 def list_categories():
-    return {"categories": storage.load_categories()}
+    return storage.load_categories()
 
 
 @app.post("/categories")
@@ -249,6 +251,15 @@ def delete_category_endpoint(cat_id: str):
     if not ok:
         raise HTTPException(status_code=404, detail="Category not found")
     return {"status": "deleted"}
+
+
+@app.patch("/meetings/{meeting_id}/title")
+def patch_meeting_title(meeting_id: str, body: dict = Body(...)):
+    title = body.get("title", "").strip()
+    result = storage.update_meeting_title(meeting_id, title)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    return result
 
 
 @app.patch("/meetings/{meeting_id}/tags")
