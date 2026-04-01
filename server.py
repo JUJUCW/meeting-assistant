@@ -1,4 +1,5 @@
 # server.py
+import io
 import uuid
 import threading
 import tempfile
@@ -6,6 +7,7 @@ import os
 from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 import whisper
 import opencc
 import analyzer
@@ -268,3 +270,70 @@ def patch_meeting_tags(meeting_id: str, body: dict = Body(...)):
     if result is None:
         raise HTTPException(status_code=404, detail="Meeting not found")
     return result
+
+
+@app.post("/meetings/{meeting_id}/summary")
+def generate_summary_endpoint(meeting_id: str):
+    meeting = storage.load_meeting(meeting_id)
+    if meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    transcript = meeting.get("transcript", "")
+    if not transcript:
+        raise HTTPException(status_code=422, detail="No transcript available")
+    summary, ollama_available = analyzer.generate_summary(transcript)
+    if not ollama_available:
+        raise HTTPException(status_code=503, detail="Ollama 不可用，無法產生摘要")
+    storage.update_meeting_summary(meeting_id, summary)
+    return {"summary": summary}
+
+
+@app.get("/meetings/{meeting_id}/export/docx")
+def export_docx(meeting_id: str):
+    from docx import Document
+    from docx.shared import Pt
+
+    meeting = storage.load_meeting(meeting_id)
+    if meeting is None:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    doc = Document()
+    title = meeting.get("title") or meeting["id"]
+    doc.add_heading(title, 0)
+    doc.add_paragraph(f"日期：{meeting['created_at'][:10]}")
+
+    tags = meeting.get("tags", [])
+    if tags:
+        doc.add_paragraph(f"標籤：{', '.join(tags)}")
+
+    summary = meeting.get("summary", "")
+    if summary:
+        doc.add_heading("摘要", level=1)
+        doc.add_paragraph(summary)
+
+    decisions = meeting.get("decisions", [])
+    if decisions:
+        doc.add_heading("決策", level=1)
+        for d in decisions:
+            doc.add_paragraph(d["content"], style="List Bullet")
+            if d.get("rationale"):
+                p = doc.add_paragraph(f"原因：{d['rationale']}")
+                p.paragraph_format.left_indent = Pt(24)
+
+    items = meeting.get("action_items", [])
+    if items:
+        doc.add_heading("待辦事項", level=1)
+        for a in items:
+            status = "✓" if a.get("status") == "done" else "○"
+            assignee = f"（{a['assignee']}）" if a.get("assignee") else ""
+            deadline = f" — {a['deadline']}" if a.get("deadline") else ""
+            doc.add_paragraph(f"{status} {a['content']}{assignee}{deadline}", style="List Bullet")
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    filename = f"{meeting_id}.docx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )

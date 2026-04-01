@@ -31,6 +31,12 @@ export const createActionItem = (meetingId: string, body: Partial<ActionItem>) =
 export const patchActionItem = (meetingId: string, itemId: string, body: Partial<ActionItem>) =>
   api.patch<ActionItem>(`/meetings/${encodeURIComponent(meetingId)}/action-items/${itemId}`, body)
 
+export const postGenerateSummary = (id: string) =>
+  api.post<{ summary: string }>(`/meetings/${encodeURIComponent(id)}/summary`, {})
+
+export const getMeetingDocxUrl = (id: string) =>
+  `/meetings/${encodeURIComponent(id)}/export/docx`
+
 export const getPendingActionItems = () =>
   api.get<ActionItem[]>('/action-items/pending')
 

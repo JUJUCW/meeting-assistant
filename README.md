@@ -6,12 +6,13 @@ AI-powered meeting notes tool. Upload or record audio, get transcription + decis
 
 - Upload audio files or record directly in browser
 - Transcription via Whisper turbo (local, Traditional Chinese)
-- AI analysis via Ollama — extracts decisions and action items
+- AI analysis via Ollama — extracts decisions, action items, and meeting summary
 - Background transcription with real-time progress indicator
 - Meeting history with search, tags, and category filtering
 - Edit titles, decisions, and action items inline
 - Track and resolve action items across meetings
-- Export meetings as Markdown or JSON
+- Generate and regenerate AI meeting summary on demand
+- Export meetings as Markdown, JSON, or .docx
 
 ## Tech Stack
 

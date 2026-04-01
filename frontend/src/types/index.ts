@@ -33,6 +33,7 @@ export interface MeetingListItem {
 
 export interface Meeting extends MeetingListItem {
   transcript: string
+  summary?: string
   decisions: Decision[]
   action_items: ActionItem[]
   date?: string

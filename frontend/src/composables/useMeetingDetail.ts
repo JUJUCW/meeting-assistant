@@ -6,6 +6,7 @@ import {
   patchDecision,
   createActionItem,
   patchActionItem,
+  postGenerateSummary,
 } from '../api/meetings'
 import type { Meeting, Decision, ActionItem } from '../types'
 
@@ -13,6 +14,8 @@ export function useMeetingDetail() {
   const meeting = ref<Meeting | null>(null)
   const isLoading = ref(false)
   const error = ref('')
+  const isSummaryLoading = ref(false)
+  const summaryError = ref('')
 
   async function load(id: string) {
     isLoading.value = true
@@ -72,10 +75,25 @@ export function useMeetingDetail() {
     await updateAction(itemId, { status: newStatus })
   }
 
+  async function generateSummary() {
+    if (!meeting.value) return
+    isSummaryLoading.value = true
+    summaryError.value = ''
+    try {
+      const { summary } = await postGenerateSummary(meeting.value.id)
+      meeting.value = { ...meeting.value, summary }
+    } catch (e) {
+      summaryError.value = e instanceof Error ? e.message : '產生失敗'
+    } finally {
+      isSummaryLoading.value = false
+    }
+  }
+
   function close() {
     meeting.value = null
     error.value = ''
+    summaryError.value = ''
   }
 
-  return { meeting, isLoading, error, load, close, updateTitle, addDecision, updateDecision, addAction, updateAction, toggleActionStatus }
+  return { meeting, isLoading, error, isSummaryLoading, summaryError, load, close, updateTitle, addDecision, updateDecision, addAction, updateAction, toggleActionStatus, generateSummary }
 }

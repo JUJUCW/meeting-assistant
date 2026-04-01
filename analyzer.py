@@ -10,6 +10,22 @@ MODEL = "llama3.1:8b"
 EMPTY_RESULT: dict = {"decisions": [], "action_items": [], "resolved_action_item_ids": []}
 
 
+def generate_summary(transcript: str) -> tuple[str, bool]:
+    """Returns (summary_text, ollama_available). Never raises."""
+    prompt = (
+        "你是一位會議記錄員。請根據以下會議逐字稿，用繁體中文撰寫一份簡潔的會議摘要（3至5句話）。"
+        "只輸出摘要文字，不要加任何前言或標題。\n\n"
+        f"逐字稿：\n{transcript}"
+    )
+    for attempt in range(3):
+        try:
+            raw = _call_ollama(prompt)
+            return raw.strip(), True
+        except Exception as e:
+            logger.warning("Ollama summary attempt %d failed: %s", attempt + 1, e)
+    return "", False
+
+
 def analyze(transcript: str, pending_items: list[dict]) -> tuple[dict, bool]:
     """Returns (result_dict, ollama_available). Never raises."""
     prompt = _build_prompt(transcript, pending_items)

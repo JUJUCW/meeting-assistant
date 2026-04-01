@@ -6,6 +6,7 @@ import SearchBar from '../components/history/SearchBar.vue'
 import MeetingList from '../components/history/MeetingList.vue'
 import DetailHeader from '../components/detail/DetailHeader.vue'
 import TranscriptSection from '../components/detail/TranscriptSection.vue'
+import SummarySection from '../components/detail/SummarySection.vue'
 import DecisionList from '../components/detail/DecisionList.vue'
 import ActionItemList from '../components/detail/ActionItemList.vue'
 import TranscriptionProgress from '../components/upload/TranscriptionProgress.vue'
@@ -29,7 +30,7 @@ const {
   updateLocal,
 } = useMeetings()
 
-const { meeting, load: loadDetail, close, updateTitle, addDecision, updateDecision, addAction, updateAction, toggleActionStatus } = useMeetingDetail()
+const { meeting, load: loadDetail, close, updateTitle, addDecision, updateDecision, addAction, updateAction, toggleActionStatus, generateSummary, isSummaryLoading, summaryError } = useMeetingDetail()
 const { load: loadCategories } = useCategories()
 const { activeJob, dismiss } = useTranscriptionJob()
 const showDetail = ref(false)
@@ -150,6 +151,14 @@ async function onTitleSave(val: string) {
       />
 
       <TranscriptSection v-if="meeting.transcript" :transcript="meeting.transcript" />
+
+      <SummarySection
+        :meeting-id="meeting.id"
+        :summary="meeting.summary"
+        :is-loading="isSummaryLoading"
+        :error="summaryError"
+        @generate="generateSummary"
+      />
 
       <DecisionList
         :decisions="meeting.decisions ?? []"
