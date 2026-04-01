@@ -29,20 +29,22 @@ jobs_lock = threading.Lock()
 ALLOWED_EXTENSIONS = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm"}
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB
 
+# Load model once at startup to avoid reloading on every transcription
+_whisper_model = WhisperModel("turbo", device="cpu", compute_type="int8")
+_converter = opencc.OpenCC('s2t')
+
 
 def _run_transcription(job_id: str, file_path: str):
     with jobs_lock:
         jobs[job_id]["status"] = "processing"
     try:
-        model = WhisperModel("turbo", device="cpu", compute_type="int8")
-        segments_gen, _ = model.transcribe(
+        segments_gen, _ = _whisper_model.transcribe(
             file_path,
             language="zh",
             initial_prompt="以下是繁體中文的會議記錄。",
         )
-        converter = opencc.OpenCC('s2t')
         segments = [
-            {"id": i, "text": converter.convert(seg.text.strip()), "tag": None}
+            {"id": i, "text": _converter.convert(seg.text.strip()), "tag": None}
             for i, seg in enumerate(segments_gen)
         ]
 
