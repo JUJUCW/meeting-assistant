@@ -1,13 +1,23 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import AppHeader from '../components/layout/AppHeader.vue'
-import StepIndicator from '../components/upload/StepIndicator.vue'
 import AudioInput from '../components/upload/AudioInput.vue'
-import ProcessingStatus from '../components/upload/ProcessingStatus.vue'
-import AnalysisPreview from '../components/upload/AnalysisPreview.vue'
-import SummaryPanel from '../components/upload/SummaryPanel.vue'
-import { useTranscription } from '../composables/useTranscription'
+import { useTranscriptionJob } from '../composables/useTranscriptionJob'
 
-const { step, statusMsg, pollError, result, submitError, submit, retry, reanalyze, goToSummary, startOver } = useTranscription()
+const router = useRouter()
+const { start } = useTranscriptionJob()
+const submitError = ref('')
+
+async function submit(file: File | Blob, filename: string, audioDuration: number) {
+  submitError.value = ''
+  try {
+    await start(file, filename, audioDuration)
+    router.push('/history')
+  } catch (e) {
+    submitError.value = e instanceof Error ? e.message : '送出失敗'
+  }
+}
 </script>
 
 <template>
@@ -19,35 +29,8 @@ const { step, statusMsg, pollError, result, submitError, submit, retry, reanalyz
       nav-to="/history"
       nav-label="歷史紀錄 →"
     />
-
     <div v-if="submitError" class="submit-error">{{ submitError }}</div>
-
-    <StepIndicator :current="step" />
-
-    <AudioInput
-      v-if="step === 1"
-      @submit="submit"
-    />
-
-    <ProcessingStatus
-      v-else-if="step === 2"
-      :status-msg="statusMsg"
-      :error="pollError"
-      @retry="retry"
-    />
-
-    <AnalysisPreview
-      v-else-if="step === 3 && result"
-      :result="result"
-      @reanalyze="reanalyze"
-      @next="goToSummary"
-    />
-
-    <SummaryPanel
-      v-else-if="step === 4 && result"
-      :result="result"
-      @start-over="startOver"
-    />
+    <AudioInput @submit="submit" />
   </div>
 </template>
 

@@ -149,4 +149,21 @@ onUnmounted(() => {
 .tag-popover-section:last-child { margin-bottom: 0; }
 .tag-popover-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .tag-popover-input { width: 100%; box-sizing: border-box; font-size: 12px; padding: 5px 8px; }
+
+.tag-chip {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 12px;
+  font-size: 12px;
+  cursor: pointer;
+  background: #2a2a2a;
+  color: #aaa;
+  border: 1px solid transparent;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+  user-select: none;
+}
+.tag-chip:hover { opacity: 0.8; }
+.tag-chip.category-chip { background: #1d3a5e; color: #6ab0f5; }
+.tag-chip.category-chip.filter-active { background: #2563a8; color: #fff; outline: 2px solid #6ab0f5; outline-offset: 1px; }
+.tag-chip.filter-active:not(.category-chip) { background: #3a3a1a; color: #e0c96e; outline: 2px solid rgba(212,175,55,0.6); outline-offset: 1px; }
 </style>

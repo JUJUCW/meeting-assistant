@@ -2,11 +2,12 @@
 import { ref, computed } from 'vue'
 import { useAudioRecorder } from '../../composables/useAudioRecorder'
 
-const emit = defineEmits<{ (e: 'submit', file: File | Blob, filename: string): void }>()
+const emit = defineEmits<{ (e: 'submit', file: File | Blob, filename: string, audioDuration: number): void }>()
 
 const { isRecording, recordedBlob, duration, error: recError, startRecording, stopRecording, reset: resetRecorder, formatDuration } = useAudioRecorder()
 
 const selectedFile = ref<File | null>(null)
+const audioDuration = ref(0)
 const fileError = ref('')
 const serverError = ref(false)
 
@@ -24,9 +25,21 @@ async function checkServer() {
 }
 checkServer()
 
-function onFileChange(e: Event) {
+function getAudioDuration(file: File): Promise<number> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file)
+    const audio = new Audio(url)
+    const cleanup = () => URL.revokeObjectURL(url)
+    audio.addEventListener('loadedmetadata', () => { cleanup(); resolve(Math.round(audio.duration)) })
+    audio.addEventListener('error', () => { cleanup(); resolve(0) })
+    setTimeout(() => { cleanup(); resolve(0) }, 5000)
+  })
+}
+
+async function onFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0] ?? null
   fileError.value = ''
+  audioDuration.value = 0
   if (file && file.size > MAX_SIZE) {
     fileError.value = '檔案過大，上限為 200 MB。'
     selectedFile.value = null
@@ -34,6 +47,7 @@ function onFileChange(e: Event) {
   }
   selectedFile.value = file
   resetRecorder()
+  if (file) audioDuration.value = await getAudioDuration(file)
 }
 
 function toggleRecord() {
@@ -49,7 +63,8 @@ function submit() {
   const audio = selectedFile.value || recordedBlob.value
   if (!audio) return
   const filename = selectedFile.value ? selectedFile.value.name : 'recording.webm'
-  emit('submit', audio, filename)
+  const dur = selectedFile.value ? audioDuration.value : duration.value
+  emit('submit', audio, filename, dur)
 }
 </script>
 

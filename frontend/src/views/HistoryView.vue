@@ -8,9 +8,11 @@ import DetailHeader from '../components/detail/DetailHeader.vue'
 import TranscriptSection from '../components/detail/TranscriptSection.vue'
 import DecisionList from '../components/detail/DecisionList.vue'
 import ActionItemList from '../components/detail/ActionItemList.vue'
+import TranscriptionProgress from '../components/upload/TranscriptionProgress.vue'
 import { useMeetings } from '../composables/useMeetings'
 import { useMeetingDetail } from '../composables/useMeetingDetail'
 import { useCategories } from '../composables/useCategories'
+import { useTranscriptionJob } from '../composables/useTranscriptionJob'
 import { exportMarkdown, exportJson } from '../utils/export'
 import type { MeetingListItem, Decision, ActionItem } from '../types'
 
@@ -29,6 +31,7 @@ const {
 
 const { meeting, load: loadDetail, close, updateTitle, addDecision, updateDecision, addAction, updateAction, toggleActionStatus } = useMeetingDetail()
 const { load: loadCategories } = useCategories()
+const { activeJob, dismiss } = useTranscriptionJob()
 const showDetail = ref(false)
 
 onMounted(async () => {
@@ -36,6 +39,11 @@ onMounted(async () => {
 })
 
 watch(searchQuery, (q) => search(q))
+
+// 轉錄完成時自動刷新列表
+watch(() => activeJob.value?.status, (status) => {
+  if (status === 'done') load()
+})
 
 async function openDetail(id: string) {
   await loadDetail(id)
@@ -102,6 +110,15 @@ async function onTitleSave(val: string) {
       />
 
       <ServerWarning :visible="serverError" />
+
+      <TranscriptionProgress
+        v-if="activeJob"
+        :status="activeJob.status"
+        :estimated-secs="activeJob.estimatedSecs"
+        :elapsed-secs="activeJob.elapsedSecs"
+        :error="activeJob.error"
+        @dismiss="dismiss"
+      />
 
       <div v-if="activeFilter" class="filter-bar">
         <span class="filter-label">
