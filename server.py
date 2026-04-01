@@ -8,7 +8,7 @@ from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-import whisper
+from faster_whisper import WhisperModel
 import opencc
 import analyzer
 import storage
@@ -34,12 +34,16 @@ def _run_transcription(job_id: str, file_path: str):
     with jobs_lock:
         jobs[job_id]["status"] = "processing"
     try:
-        model = whisper.load_model("turbo")
-        result = model.transcribe(file_path, language="zh", initial_prompt="以下是繁體中文的會議記錄。")
+        model = WhisperModel("turbo", device="cpu", compute_type="int8")
+        segments_gen, _ = model.transcribe(
+            file_path,
+            language="zh",
+            initial_prompt="以下是繁體中文的會議記錄。",
+        )
         converter = opencc.OpenCC('s2t')
         segments = [
-            {"id": i, "text": converter.convert(seg["text"].strip()), "tag": None}
-            for i, seg in enumerate(result["segments"])
+            {"id": i, "text": converter.convert(seg.text.strip()), "tag": None}
+            for i, seg in enumerate(segments_gen)
         ]
 
         # AI analysis
