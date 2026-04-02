@@ -28,6 +28,8 @@ async function submit(file: File | Blob, filename: string, audioDuration: number
       subtitle="AI-Powered Meeting Notes"
       nav-to="/history"
       nav-label="歷史紀錄 →"
+      nav2-to="/translate"
+      nav2-label="文件翻譯 →"
     />
     <div v-if="submitError" class="submit-error">{{ submitError }}</div>
     <AudioInput @submit="submit" />

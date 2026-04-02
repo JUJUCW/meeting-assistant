@@ -12,6 +12,7 @@ from faster_whisper import WhisperModel
 import opencc
 import analyzer
 import storage
+import pdf_translator
 
 app = FastAPI()
 
@@ -357,3 +358,81 @@ def export_docx(meeting_id: str):
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+# ── PDF Translation ──────────────────────────────────────────────────────────
+
+MAX_TRANSLATE_BYTES = 50 * 1024 * 1024  # 50 MB
+
+
+@app.get("/translate/list")
+def translate_list():
+    return {"jobs": pdf_translator.list_jobs()}
+
+
+@app.post("/translate/upload")
+async def translate_upload(file: UploadFile = File(...)):
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="只支援 PDF 格式")
+    content = await file.read()
+    if len(content) > MAX_TRANSLATE_BYTES:
+        raise HTTPException(status_code=413, detail="檔案過大，上限為 50 MB。")
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+    job_id = pdf_translator.start(tmp_path, original_filename=file.filename or "document.pdf")
+    return {"job_id": job_id}
+
+
+@app.get("/translate/status/{job_id}")
+def translate_status(job_id: str):
+    job = pdf_translator.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {
+        "status": job["status"],
+        "progress": job["progress"],
+        "total": job["total"],
+        "done": job["done"],
+        "source_lang": job["source_lang"],
+        "error": job["error"],
+    }
+
+
+@app.get("/translate/download/{job_id}/{fmt}")
+def translate_download(job_id: str, fmt: str):
+    job = pdf_translator.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job["status"] != "done":
+        raise HTTPException(status_code=202, detail="Not ready yet")
+    if fmt == "pdf":
+        path = job["pdf_out"]
+        media_type = "application/pdf"
+        filename = "translated.pdf"
+    elif fmt == "docx":
+        path = job["docx_out"]
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        filename = "translated.docx"
+    else:
+        raise HTTPException(status_code=400, detail="格式不支援，請使用 pdf 或 docx")
+    if not path or not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Output file not found")
+
+    def _iter():
+        with open(path, "rb") as f:
+            yield from f
+
+    return StreamingResponse(
+        _iter(),
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.delete("/translate/{job_id}")
+def translate_delete(job_id: str):
+    found = pdf_translator.delete_job(job_id)
+    if not found:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"status": "deleted"}

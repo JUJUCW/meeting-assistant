@@ -13,6 +13,7 @@ export default defineConfig({
       '/meetings':     'http://localhost:8000',
       '/categories':   'http://localhost:8000',
       '/action-items': 'http://localhost:8000',
+      '/translate/':   'http://localhost:8000',
     },
   },
 })
