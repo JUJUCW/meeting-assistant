@@ -23,10 +23,10 @@ const newTagInput = ref('')
 const newCatInput = ref('')
 const popoverEl = ref<HTMLDivElement>()
 
-const style = {
+const style = ref({
   top: `${props.anchorRect.bottom + 6}px`,
   left: `${Math.min(props.anchorRect.left, window.innerWidth - 296)}px`,
-}
+})
 
 function toggleCategory(cat: Category) {
   selectedCategoryId.value = selectedCategoryId.value === cat.id ? null : cat.id
@@ -70,6 +70,16 @@ function onEsc(e: KeyboardEvent) {
 }
 
 onMounted(() => {
+  if (popoverEl.value) {
+    const popoverHeight = popoverEl.value.offsetHeight
+    const wouldOverflowBottom = props.anchorRect.bottom + 6 + popoverHeight > window.innerHeight
+    if (wouldOverflowBottom) {
+      style.value = {
+        ...style.value,
+        top: `${props.anchorRect.top - popoverHeight - 6}px`,
+      }
+    }
+  }
   setTimeout(() => {
     document.addEventListener('click', onOutsideClick)
     document.addEventListener('keydown', onEsc)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import InlineEdit from '../shared/InlineEdit.vue'
 import TagPopover from './TagPopover.vue'
 import { patchMeetingTitle, patchMeetingTags } from '../../api/meetings'
@@ -15,6 +15,10 @@ const emit = defineEmits<{
 }>()
 
 const { categories } = useCategories()
+
+watch(() => props.meeting.title, (newTitle) => {
+  title.value = newTitle ?? ''
+})
 
 const showDeleteConfirm = ref(false)
 const popoverAnchorRect = ref<DOMRect | null>(null)
@@ -158,6 +162,12 @@ async function onTagSave(payload: { categoryId: string | null; tags: string[] })
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  .meeting-card-top { flex-wrap: wrap; }
+  .meeting-date { width: 100%; }
+  .meeting-card-actions { margin-left: auto; }
 }
 
 .card-tags {
