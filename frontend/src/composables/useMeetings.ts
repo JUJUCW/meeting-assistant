@@ -1,33 +1,35 @@
 import { ref, computed } from 'vue'
-import { fetchMeetings, searchMeetings, deleteMeeting } from '../api/meetings'
+import { fetchMeetings } from '../api/meetings'
 import type { MeetingListItem } from '../types'
 
 export function useMeetings() {
-  const allMeetings = ref<MeetingListItem[]>([])
+  const meetings = ref<MeetingListItem[]>([])
+  const total = ref(0)
+  const page = ref(1)
+  const pageSize = ref(20)
   const searchQuery = ref('')
-  const searchResults = ref<MeetingListItem[] | null>(null)
   const activeFilter = ref<{ type: 'category' | 'tag'; value: string } | null>(null)
   const isLoading = ref(false)
   const serverError = ref(false)
 
-  let searchTimer: ReturnType<typeof setTimeout>
+  const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 
-  const displayedMeetings = computed<MeetingListItem[]>(() => {
-    const base = searchResults.value ?? allMeetings.value
-    if (!activeFilter.value) return base
-    const { type, value } = activeFilter.value
-    if (type === 'category') return base.filter(m => m.category_id === value)
-    if (type === 'tag')      return base.filter(m => (m.tags ?? []).includes(value))
-    return base
-  })
+  let searchTimer: ReturnType<typeof setTimeout>
 
   async function load() {
     isLoading.value = true
     try {
-      const meetings = await fetchMeetings()
-      allMeetings.value = [...meetings].sort((a, b) =>
-        (b.created_at ?? '').localeCompare(a.created_at ?? '')
-      )
+      const params: Record<string, string | number> = {
+        page: page.value,
+        limit: pageSize.value,
+      }
+      if (searchQuery.value.trim()) params.q = searchQuery.value.trim()
+      if (activeFilter.value?.type === 'category') params.category_id = activeFilter.value.value
+      if (activeFilter.value?.type === 'tag')      params.tag = activeFilter.value.value
+
+      const result = await fetchMeetings(params)
+      meetings.value = result.meetings
+      total.value = result.total
       serverError.value = false
     } catch {
       serverError.value = true
@@ -39,16 +41,9 @@ export function useMeetings() {
   function search(q: string) {
     searchQuery.value = q
     clearTimeout(searchTimer)
-    if (!q.trim()) {
-      searchResults.value = null
-      return
-    }
-    searchTimer = setTimeout(async () => {
-      try {
-        searchResults.value = await searchMeetings(q)
-      } catch {
-        searchResults.value = []
-      }
+    searchTimer = setTimeout(() => {
+      page.value = 1
+      load()
     }, 300)
   }
 
@@ -58,32 +53,49 @@ export function useMeetings() {
     } else {
       activeFilter.value = { type, value }
     }
+    page.value = 1
+    load()
   }
 
   function clearFilter() {
     activeFilter.value = null
+    page.value = 1
+    load()
+  }
+
+  function setPage(p: number) {
+    page.value = p
+    load()
+  }
+
+  function setPageSize(size: number) {
+    pageSize.value = size
+    page.value = 1
+    load()
   }
 
   async function remove(id: string) {
-    await deleteMeeting(id)
-    allMeetings.value = allMeetings.value.filter(m => m.id !== id)
-    if (searchResults.value) {
-      searchResults.value = searchResults.value.filter(m => m.id !== id)
+    // Optimistic: remove locally, then reload to get correct total
+    meetings.value = meetings.value.filter(m => m.id !== id)
+    total.value = Math.max(0, total.value - 1)
+    // If current page is now empty and we're not on page 1, go back
+    if (meetings.value.length === 0 && page.value > 1) {
+      page.value -= 1
     }
+    await load()
   }
 
   function updateLocal(id: string, patch: Partial<MeetingListItem>) {
-    const idx = allMeetings.value.findIndex(m => m.id === id)
-    if (idx >= 0) allMeetings.value[idx] = { ...allMeetings.value[idx], ...patch }
-    if (searchResults.value) {
-      const si = searchResults.value.findIndex(m => m.id === id)
-      if (si >= 0) searchResults.value[si] = { ...searchResults.value[si], ...patch }
-    }
+    const idx = meetings.value.findIndex(m => m.id === id)
+    if (idx >= 0) meetings.value[idx] = { ...meetings.value[idx], ...patch }
   }
 
   return {
-    allMeetings,
-    displayedMeetings,
+    meetings,
+    total,
+    page,
+    pageSize,
+    totalPages,
     searchQuery,
     activeFilter,
     isLoading,
@@ -92,6 +104,8 @@ export function useMeetings() {
     search,
     setFilter,
     clearFilter,
+    setPage,
+    setPageSize,
     remove,
     updateLocal,
   }

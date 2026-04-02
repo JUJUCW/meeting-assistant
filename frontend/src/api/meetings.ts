@@ -1,8 +1,24 @@
 import { api } from './client'
-import type { Meeting, MeetingListItem, Decision, ActionItem } from '../types'
+import type { Meeting, MeetingListItem, PaginatedMeetings, Decision, ActionItem } from '../types'
 
-export const fetchMeetings = () =>
-  api.get<{ meetings: MeetingListItem[] }>('/meetings').then(r => r.meetings)
+export interface MeetingsParams {
+  page?: number
+  limit?: number
+  q?: string
+  category_id?: string
+  tag?: string
+}
+
+export const fetchMeetings = (params: MeetingsParams = {}): Promise<PaginatedMeetings> => {
+  const qs = new URLSearchParams()
+  if (params.page)        qs.set('page', String(params.page))
+  if (params.limit)       qs.set('limit', String(params.limit))
+  if (params.q)           qs.set('q', params.q)
+  if (params.category_id) qs.set('category_id', params.category_id)
+  if (params.tag)         qs.set('tag', params.tag)
+  const query = qs.toString()
+  return api.get<PaginatedMeetings>(`/meetings${query ? `?${query}` : ''}`)
+}
 
 export const searchMeetings = (q: string) =>
   api.get<{ meetings: MeetingListItem[] }>(`/meetings/search?q=${encodeURIComponent(q)}`).then(r => r.meetings)

@@ -20,6 +20,11 @@ export interface ActionItem {
   status: 'pending' | 'done'
 }
 
+export interface SearchHit {
+  field: 'transcript' | 'decisions' | 'action_items'
+  snippet: string
+}
+
 export interface MeetingListItem {
   id: string
   created_at: string
@@ -29,6 +34,14 @@ export interface MeetingListItem {
   decision_count: number
   action_item_count: number
   pending_action_item_count: number
+  hits?: SearchHit[]
+}
+
+export interface PaginatedMeetings {
+  meetings: MeetingListItem[]
+  total: number
+  page: number
+  limit: number
 }
 
 export interface Meeting extends MeetingListItem {

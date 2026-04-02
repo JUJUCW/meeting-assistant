@@ -44,112 +44,124 @@ def load_meeting(meeting_id: str) -> dict | None:
         return None
 
 
-def list_meetings() -> list[dict]:
+def _search_hits(m: dict, query: str) -> list[dict]:
+    """Return search hit snippets for a meeting dict. Empty list = no match."""
+    q = query.lower()
+    hits = []
+
+    # 1. transcript
+    transcript = m.get("transcript", "") or ""
+    idx = transcript.lower().find(q)
+    if idx >= 0:
+        start = max(0, idx - 30)
+        end = min(len(transcript), idx + len(query) + 30)
+        snippet = transcript[start:end]
+        if start > 0:
+            snippet = "…" + snippet
+        if end < len(transcript):
+            snippet = snippet + "…"
+        hits.append({"field": "transcript", "snippet": snippet})
+
+    # 2. decisions（content 或 rationale，取第一筆命中）
+    for d in m.get("decisions", []):
+        matched = False
+        for val in [d.get("content", "") or "", d.get("rationale", "") or ""]:
+            idx = val.lower().find(q)
+            if idx >= 0:
+                start = max(0, idx - 30)
+                end = min(len(val), idx + len(query) + 30)
+                snippet = val[start:end]
+                if start > 0:
+                    snippet = "…" + snippet
+                if end < len(val):
+                    snippet = snippet + "…"
+                hits.append({"field": "decisions", "snippet": snippet})
+                matched = True
+                break
+        if matched:
+            break
+
+    # 3. action_items（content 或 assignee，取第一筆命中）
+    for a in m.get("action_items", []):
+        matched = False
+        for val in [a.get("content", "") or "", a.get("assignee", "") or ""]:
+            idx = val.lower().find(q)
+            if idx >= 0:
+                start = max(0, idx - 30)
+                end = min(len(val), idx + len(query) + 30)
+                snippet = val[start:end]
+                if start > 0:
+                    snippet = "…" + snippet
+                if end < len(val):
+                    snippet = snippet + "…"
+                hits.append({"field": "action_items", "snippet": snippet})
+                matched = True
+                break
+        if matched:
+            break
+
+    return hits
+
+
+def _meeting_list_item(m: dict, hits: list[dict] | None = None) -> dict:
+    item: dict = {
+        "id": m["id"],
+        "created_at": m["created_at"],
+        "title": m.get("title"),
+        "decision_count": len(m.get("decisions", [])),
+        "action_item_count": len(m.get("action_items", [])),
+        "pending_action_item_count": sum(
+            1 for a in m.get("action_items", []) if a.get("status") == "pending"
+        ),
+        "category_id": m.get("category_id"),
+        "tags": m.get("tags", []),
+    }
+    if hits:
+        item["hits"] = hits
+    return item
+
+
+def list_meetings(
+    *,
+    page: int = 1,
+    limit: int = 20,
+    q: str = "",
+    category_id: str = "",
+    tag: str = "",
+) -> tuple[list[dict], int]:
     if not MEETINGS_DIR.exists():
-        return []
-    meetings = []
+        return [], 0
+
+    results: list[dict] = []
     for path in sorted(MEETINGS_DIR.glob("*.json"), reverse=True):
         try:
             m = json.loads(path.read_text())
-            meetings.append({
-                "id": m["id"],
-                "created_at": m["created_at"],
-                "decision_count": len(m.get("decisions", [])),
-                "action_item_count": len(m.get("action_items", [])),
-                "pending_action_item_count": sum(
-                    1 for a in m.get("action_items", []) if a.get("status") == "pending"
-                ),
-                "category_id": m.get("category_id"),
-                "tags": m.get("tags", []),
-            })
         except Exception as e:
             logger.warning("Skipping corrupted meeting file %s: %s", path, e)
             continue
-    return meetings
+
+        if category_id and m.get("category_id") != category_id:
+            continue
+        if tag and tag not in m.get("tags", []):
+            continue
+
+        hits: list[dict] = []
+        if q:
+            hits = _search_hits(m, q)
+            if not hits:
+                continue
+
+        results.append(_meeting_list_item(m, hits or None))
+
+    total = len(results)
+    start = (page - 1) * limit
+    return results[start:start + limit], total
 
 
 def search_meetings(query: str) -> list[dict]:
-    if not query:
-        return []
-    q = query.lower()
-    if not MEETINGS_DIR.exists():
-        return []
-    results = []
-    for path in sorted(MEETINGS_DIR.glob("*.json"), reverse=True):
-        try:
-            m = json.loads(path.read_text())
-        except Exception as e:
-            logger.warning("Skipping corrupted meeting file %s: %s", path, e)
-            continue
-
-        hits = []
-
-        # 1. transcript
-        transcript = m.get("transcript", "") or ""
-        idx = transcript.lower().find(q)
-        if idx >= 0:
-            start = max(0, idx - 30)
-            end = min(len(transcript), idx + len(query) + 30)
-            snippet = transcript[start:end]
-            if start > 0:
-                snippet = "…" + snippet
-            if end < len(transcript):
-                snippet = snippet + "…"
-            hits.append({"field": "transcript", "snippet": snippet})
-
-        # 2. decisions（content 或 rationale，取第一筆命中）
-        for d in m.get("decisions", []):
-            matched = False
-            for val in [d.get("content", "") or "", d.get("rationale", "") or ""]:
-                idx = val.lower().find(q)
-                if idx >= 0:
-                    start = max(0, idx - 30)
-                    end = min(len(val), idx + len(query) + 30)
-                    snippet = val[start:end]
-                    if start > 0:
-                        snippet = "…" + snippet
-                    if end < len(val):
-                        snippet = snippet + "…"
-                    hits.append({"field": "decisions", "snippet": snippet})
-                    matched = True
-                    break
-            if matched:
-                break
-
-        # 3. action_items（content 或 assignee，取第一筆命中）
-        for a in m.get("action_items", []):
-            matched = False
-            for val in [a.get("content", "") or "", a.get("assignee", "") or ""]:
-                idx = val.lower().find(q)
-                if idx >= 0:
-                    start = max(0, idx - 30)
-                    end = min(len(val), idx + len(query) + 30)
-                    snippet = val[start:end]
-                    if start > 0:
-                        snippet = "…" + snippet
-                    if end < len(val):
-                        snippet = snippet + "…"
-                    hits.append({"field": "action_items", "snippet": snippet})
-                    matched = True
-                    break
-            if matched:
-                break
-
-        if hits:
-            results.append({
-                "id": m["id"],
-                "created_at": m["created_at"],
-                "decision_count": len(m.get("decisions", [])),
-                "action_item_count": len(m.get("action_items", [])),
-                "pending_action_item_count": sum(
-                    1 for a in m.get("action_items", []) if a.get("status") == "pending"
-                ),
-                "category_id": m.get("category_id"),
-                "tags": m.get("tags", []),
-                "hits": hits,
-            })
-
-    return results
+    """Deprecated: use list_meetings(q=query) instead."""
+    meetings, _ = list_meetings(q=query, limit=10_000)
+    return meetings
 
 
 def get_pending_action_items() -> list[dict]:

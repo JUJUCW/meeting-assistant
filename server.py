@@ -164,13 +164,27 @@ def result(job_id: str):
 
 
 @app.get("/meetings")
-def list_meetings():
-    return {"meetings": storage.list_meetings()}
+def list_meetings(
+    page: int = 1,
+    limit: int = 20,
+    q: str = "",
+    category_id: str = "",
+    tag: str = "",
+):
+    if page < 1:
+        page = 1
+    if limit < 1 or limit > 200:
+        limit = 20
+    meetings, total = storage.list_meetings(
+        page=page, limit=limit, q=q, category_id=category_id, tag=tag
+    )
+    return {"meetings": meetings, "total": total, "page": page, "limit": limit}
 
 
 @app.get("/meetings/search")
 def search_meetings_endpoint(q: str = ""):
-    return {"meetings": storage.search_meetings(q)}
+    meetings, _ = storage.list_meetings(q=q, limit=10_000)
+    return {"meetings": meetings}
 
 
 @app.get("/meetings/{meeting_id}")

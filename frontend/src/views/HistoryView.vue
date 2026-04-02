@@ -4,6 +4,7 @@ import AppHeader from '../components/layout/AppHeader.vue'
 import ServerWarning from '../components/layout/ServerWarning.vue'
 import SearchBar from '../components/history/SearchBar.vue'
 import MeetingList from '../components/history/MeetingList.vue'
+import Pagination from '../components/history/Pagination.vue'
 import DetailHeader from '../components/detail/DetailHeader.vue'
 import TranscriptSection from '../components/detail/TranscriptSection.vue'
 import SummarySection from '../components/detail/SummarySection.vue'
@@ -18,7 +19,11 @@ import { exportMarkdown, exportJson } from '../utils/export'
 import type { MeetingListItem, Decision, ActionItem } from '../types'
 
 const {
-  displayedMeetings,
+  meetings,
+  total,
+  page,
+  pageSize,
+  totalPages,
   searchQuery,
   activeFilter,
   isLoading,
@@ -26,8 +31,11 @@ const {
   load,
   search,
   setFilter,
+  clearFilter,
   remove,
   updateLocal,
+  setPage,
+  setPageSize,
 } = useMeetings()
 
 const { meeting, load: loadDetail, close, updateTitle, addDecision, updateDecision, addAction, updateAction, toggleActionStatus, generateSummary, isSummaryLoading, summaryError } = useMeetingDetail()
@@ -38,8 +46,6 @@ const showDetail = ref(false)
 onMounted(async () => {
   await Promise.all([load(), loadCategories()])
 })
-
-watch(searchQuery, (q) => search(q))
 
 // 轉錄完成時自動刷新列表
 watch(() => activeJob.value?.status, (status) => {
@@ -125,18 +131,39 @@ async function onTitleSave(val: string) {
         <span class="filter-label">
           篩選：{{ activeFilter.type === 'category' ? '分類' : '標籤' }} — {{ activeFilter.value }}
         </span>
-        <button class="filter-clear" @click="setFilter(activeFilter!.type, activeFilter!.value)">✕ 清除</button>
+        <button class="filter-clear" @click="clearFilter">✕ 清除</button>
       </div>
 
-      <SearchBar v-model="searchQuery" />
+      <div class="list-toolbar">
+        <SearchBar :model-value="searchQuery" @update:model-value="search" />
+        <div class="page-size-selector">
+          <span class="page-size-label">每頁</span>
+          <button
+            v-for="n in [10, 20, 50]"
+            :key="n"
+            class="page-size-btn"
+            :class="{ active: pageSize === n }"
+            @click="setPageSize(n)"
+          >{{ n }}</button>
+        </div>
+      </div>
 
       <MeetingList
-        :meetings="displayedMeetings"
+        :meetings="meetings"
         :is-loading="isLoading"
         @open="openDetail"
         @deleted="onDeleted"
         @filter="onFilter"
         @updated="onUpdated"
+      />
+
+      <Pagination
+        v-if="total > 0"
+        :page="page"
+        :total-pages="totalPages"
+        :total="total"
+        :page-size="pageSize"
+        @update:page="setPage"
       />
     </template>
 
@@ -198,4 +225,67 @@ async function onTitleSave(val: string) {
   letter-spacing: 0.1em;
 }
 .filter-clear:hover { color: var(--cream); }
+
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.list-toolbar :deep(.search-bar) {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+@media (max-width: 600px) {
+  .list-toolbar {
+    flex-wrap: wrap;
+  }
+  .list-toolbar :deep(.search-bar) {
+    width: 100%;
+    flex: none;
+  }
+  .page-size-selector {
+    margin-left: auto;
+  }
+}
+
+.page-size-selector {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.page-size-label {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  margin-right: 4px;
+}
+
+.page-size-btn {
+  min-width: 36px;
+  height: 30px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.page-size-btn:hover {
+  color: var(--cream);
+  border-color: var(--gold-dim);
+}
+
+.page-size-btn.active {
+  color: var(--gold);
+  border-color: var(--gold);
+}
 </style>
