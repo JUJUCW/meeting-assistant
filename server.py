@@ -4,12 +4,14 @@ import uuid
 import threading
 import tempfile
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from faster_whisper import WhisperModel
-import opencc
+from pydantic import BaseModel
+import yt_dlp
 import analyzer
 import storage
 import pdf_translator
@@ -32,7 +34,6 @@ MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB
 
 # Load model once at startup to avoid reloading on every transcription
 _whisper_model = WhisperModel("turbo", device="cpu", compute_type="int8")
-_converter = opencc.OpenCC('s2t')
 
 
 def _run_transcription(job_id: str, file_path: str):
@@ -45,14 +46,19 @@ def _run_transcription(job_id: str, file_path: str):
             initial_prompt="以下是繁體中文的會議記錄。",
         )
         segments = [
-            {"id": i, "text": _converter.convert(seg.text.strip()), "tag": None}
+            {"id": i, "text": seg.text.strip(), "tag": None}
             for i, seg in enumerate(segments_gen)
         ]
 
-        # AI analysis
+        # AI analysis + paragraph segmentation (parallel)
         transcript = "\n".join(s["text"] for s in segments)
         pending_items = storage.get_pending_action_items()
-        analysis, ollama_available = analyzer.analyze(transcript, pending_items)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_analysis = executor.submit(analyzer.analyze, transcript, pending_items)
+            future_paragraphs = executor.submit(analyzer.segment_paragraphs, segments)
+            analysis, ollama_available = future_analysis.result()
+            paragraphs, _ = future_paragraphs.result()
 
         # Assign IDs to decisions and action items
         decisions = [
@@ -84,6 +90,7 @@ def _run_transcription(job_id: str, file_path: str):
 
         with jobs_lock:
             jobs[job_id]["segments"] = segments
+            jobs[job_id]["paragraphs"] = paragraphs
             jobs[job_id]["decisions"] = decisions
             jobs[job_id]["action_items"] = action_items
             jobs[job_id]["resolved_item_ids"] = analysis["resolved_action_item_ids"]
@@ -97,6 +104,163 @@ def _run_transcription(job_id: str, file_path: str):
     finally:
         if os.path.exists(file_path):
             os.unlink(file_path)
+
+
+def _download_youtube_audio(url: str, output_dir: str) -> tuple[str, dict]:
+    """Download audio from YouTube. Returns (file_path, metadata)."""
+    output_template = os.path.join(output_dir, "%(id)s.%(ext)s")
+    opts = {
+        "format": "bestaudio/best",
+        "postprocessors": [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+            "preferredquality": "192",
+        }],
+        "outtmpl": output_template,
+        "quiet": True,
+        "no_warnings": True,
+    }
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        video_id = info["id"]
+        title = info.get("title", "YouTube Video")
+        duration = info.get("duration", 0)
+    audio_path = os.path.join(output_dir, f"{video_id}.mp3")
+    return audio_path, {"title": title, "duration": duration, "id": video_id}
+
+
+def _run_youtube_transcription(job_id: str, url: str, tmp_dir: str):
+    """Background task: download YouTube audio and transcribe."""
+    audio_path = None
+    try:
+        # Step 1: Download
+        with jobs_lock:
+            jobs[job_id]["status"] = "downloading"
+        audio_path, meta = _download_youtube_audio(url, tmp_dir)
+        with jobs_lock:
+            jobs[job_id]["title"] = meta["title"]
+            jobs[job_id]["duration"] = meta["duration"]
+
+        # Step 2: Transcribe
+        with jobs_lock:
+            jobs[job_id]["status"] = "transcribing"
+        segments_gen, _ = _whisper_model.transcribe(
+            audio_path,
+            language="zh",
+            initial_prompt="以下是繁體中文的內容。",
+        )
+        segments = [
+            {"id": i, "text": seg.text.strip(), "tag": None}
+            for i, seg in enumerate(segments_gen)
+        ]
+
+        # Step 3: AI analysis + paragraph segmentation (parallel)
+        with jobs_lock:
+            jobs[job_id]["status"] = "analyzing"
+        transcript = "\n".join(s["text"] for s in segments)
+        pending_items = storage.get_pending_action_items()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_analysis = executor.submit(analyzer.analyze, transcript, pending_items)
+            future_paragraphs = executor.submit(analyzer.segment_paragraphs, segments)
+            analysis, ollama_available = future_analysis.result()
+            paragraphs, _ = future_paragraphs.result()
+
+        # Assign IDs
+        decisions = [
+            {"id": f"d-{i+1}", "status": "confirmed", **d}
+            for i, d in enumerate(analysis["decisions"])
+        ]
+        action_items = [
+            {"id": f"a-{i+1}", "status": "pending", **a}
+            for i, a in enumerate(analysis["action_items"])
+        ]
+
+        # Save meeting
+        meeting_id = datetime.now().strftime("%Y-%m-%d_%H-%M")
+        meeting = {
+            "id": meeting_id,
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+            "title": meta["title"],
+            "transcript": transcript,
+            "decisions": decisions,
+            "action_items": action_items,
+            "source": "youtube",
+            "youtube_url": url,
+        }
+        storage.save_meeting(meeting)
+
+        # Resolve historical items
+        item_id_to_meeting = {item["id"]: item["meeting_id"] for item in pending_items}
+        for item_id in analysis["resolved_action_item_ids"]:
+            source_meeting = item_id_to_meeting.get(item_id)
+            if source_meeting:
+                storage.resolve_action_item(source_meeting, item_id)
+
+        with jobs_lock:
+            jobs[job_id]["segments"] = segments
+            jobs[job_id]["paragraphs"] = paragraphs
+            jobs[job_id]["decisions"] = decisions
+            jobs[job_id]["action_items"] = action_items
+            jobs[job_id]["resolved_item_ids"] = analysis["resolved_action_item_ids"]
+            jobs[job_id]["meeting_id"] = meeting_id
+            jobs[job_id]["ollama_available"] = ollama_available
+            jobs[job_id]["status"] = "done"
+
+    except Exception as e:
+        with jobs_lock:
+            jobs[job_id]["status"] = "error"
+            jobs[job_id]["error"] = str(e)
+    finally:
+        # Cleanup temp directory
+        if audio_path and os.path.exists(audio_path):
+            os.unlink(audio_path)
+        if os.path.exists(tmp_dir):
+            try:
+                os.rmdir(tmp_dir)
+            except OSError:
+                pass
+
+
+class YouTubeRequest(BaseModel):
+    url: str
+
+
+@app.post("/api/youtube")
+async def youtube_transcribe(req: YouTubeRequest):
+    """Start YouTube video transcription job."""
+    url = req.url.strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="URL is required")
+    if "youtube.com" not in url and "youtu.be" not in url:
+        raise HTTPException(status_code=400, detail="Invalid YouTube URL")
+
+    tmp_dir = tempfile.mkdtemp(prefix="yt_")
+    job_id = str(uuid.uuid4())
+
+    with jobs_lock:
+        jobs[job_id] = {
+            "status": "pending",
+            "segments": [],
+            "paragraphs": [],
+            "decisions": [],
+            "action_items": [],
+            "resolved_item_ids": [],
+            "meeting_id": None,
+            "ollama_available": None,
+            "error": None,
+            "title": None,
+            "duration": None,
+            "source": "youtube",
+        }
+
+    thread = threading.Thread(
+        target=_run_youtube_transcription,
+        args=(job_id, url, tmp_dir),
+        daemon=True,
+    )
+    thread.start()
+    return {"job_id": job_id}
 
 
 @app.post("/transcribe")
@@ -120,6 +284,7 @@ async def transcribe(file: UploadFile = File(...)):
         jobs[job_id] = {
             "status": "pending",
             "segments": [],
+            "paragraphs": [],
             "decisions": [],
             "action_items": [],
             "resolved_item_ids": [],
@@ -156,6 +321,7 @@ def result(job_id: str):
         raise HTTPException(status_code=202, detail="Not ready yet")
     return {
         "segments": job["segments"],
+        "paragraphs": job["paragraphs"],
         "decisions": job["decisions"],
         "action_items": job["action_items"],
         "resolved_item_ids": job["resolved_item_ids"],

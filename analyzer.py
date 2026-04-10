@@ -6,8 +6,84 @@ import httpx
 logger = logging.getLogger(__name__)
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL = "llama3.1:8b"
+MODEL = "gemma4:e4b"
 EMPTY_RESULT: dict = {"decisions": [], "action_items": [], "resolved_action_item_ids": []}
+EMPTY_PARAGRAPHS: list[list[int]] = []
+
+
+def segment_paragraphs(segments: list[dict]) -> tuple[list[list[int]], bool]:
+    """
+    Group transcript segments into semantic paragraphs.
+    Returns (paragraph_groups, ollama_available).
+    Each group is a list of segment IDs that belong together.
+    """
+    if not segments:
+        return [], True
+
+    # Build numbered transcript for LLM
+    numbered_lines = [f"[{s['id']}] {s['text']}" for s in segments]
+    transcript_text = "\n".join(numbered_lines)
+
+    prompt = (
+        "你是一位文字編輯。以下是逐字稿，每行前面有編號 [N]。\n"
+        "請根據語義將這些句子分組成段落，輸出格式為 JSON 陣列的陣列。\n"
+        "例如：[[0,1,2],[3,4,5],[6,7]] 表示三個段落。\n"
+        "規則：\n"
+        "- 同一主題或連續論述的句子放在同一段落\n"
+        "- 主題轉換時開始新段落\n"
+        "- 每段落建議 3-8 句，但可依內容調整\n"
+        "- 只輸出 JSON，不要其他文字\n\n"
+        f"逐字稿：\n{transcript_text}"
+    )
+
+    for attempt in range(3):
+        try:
+            raw = _call_ollama(prompt)
+            groups = _parse_paragraph_groups(raw, len(segments))
+            return groups, True
+        except Exception as e:
+            logger.warning("Ollama paragraph segmentation attempt %d failed: %s", attempt + 1, e)
+
+    # Fallback: group every 5 segments
+    fallback = [
+        list(range(i, min(i + 5, len(segments))))
+        for i in range(0, len(segments), 5)
+    ]
+    return fallback, False
+
+
+def _parse_paragraph_groups(raw: str, total_segments: int) -> list[list[int]]:
+    """Parse LLM response into paragraph groups."""
+    text = raw.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        end = len(lines) - 1 if lines[-1].strip() == "```" else len(lines)
+        text = "\n".join(lines[1:end])
+
+    groups = json.loads(text)
+
+    # Validate: must be list of lists of ints
+    if not isinstance(groups, list):
+        raise ValueError("Expected list of lists")
+
+    validated = []
+    seen = set()
+    for group in groups:
+        if not isinstance(group, list):
+            raise ValueError("Each group must be a list")
+        valid_ids = [int(x) for x in group if 0 <= int(x) < total_segments]
+        # Remove duplicates while preserving order
+        unique_ids = [x for x in valid_ids if x not in seen]
+        seen.update(unique_ids)
+        if unique_ids:
+            validated.append(unique_ids)
+
+    # Add any missing segment IDs at the end
+    missing = [i for i in range(total_segments) if i not in seen]
+    if missing:
+        validated.append(missing)
+
+    return validated
 
 
 def generate_summary(transcript: str) -> tuple[str, bool]:

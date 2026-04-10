@@ -365,7 +365,34 @@
       color: var(--muted);
     }
 
-    /* ── Segment Items ── */
+    /* ── Paragraph Groups ── */
+    .paragraph-group {
+      background: rgba(212,175,55,0.02);
+      border: 1px solid rgba(212,175,55,0.08);
+      padding: 18px 20px;
+      margin-bottom: 16px;
+      transition: border-color 0.2s;
+    }
+    .paragraph-group:hover { border-color: rgba(212,175,55,0.22); }
+
+    .paragraph-text {
+      font-family: var(--font-body);
+      font-size: 13px;
+      color: var(--cream);
+      line-height: 1.85;
+      letter-spacing: 0.02em;
+    }
+
+    .paragraph-index {
+      font-family: var(--font-display);
+      font-size: 10px;
+      color: var(--gold);
+      opacity: 0.5;
+      letter-spacing: 0.1em;
+      margin-bottom: 8px;
+    }
+
+    /* ── Segment Items (legacy/fallback) ── */
     .segment-item {
       background: rgba(212,175,55,0.02);
       border: 1px solid rgba(212,175,55,0.08);
@@ -629,6 +656,17 @@
         </div>
 
         <button class="btn btn-primary" id="submitBtn" onclick="submitAudio()" disabled>送出轉錄</button>
+
+        <div class="or-divider" aria-hidden="true">或</div>
+
+        <div class="field">
+          <label class="field-label" for="youtubeUrl">YouTube 影片</label>
+          <div style="display:flex;gap:12px;align-items:center">
+            <input type="url" id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=..." style="flex:1;padding:10px 14px;background:rgba(212,175,55,0.04);border:1px solid rgba(212,175,55,0.15);color:var(--cream);font-size:13px;">
+            <button class="btn btn-primary" id="youtubeBtn" onclick="submitYouTube()">轉錄影片</button>
+          </div>
+          <div id="youtube-error" class="error-msg" style="display:none" role="alert"></div>
+        </div>
       </div>
     </div>
 
@@ -713,6 +751,7 @@
     let currentStep = 1;
     let jobId = null;
     let segments = [];
+    let paragraphs = [];
     let decisions = [];
     let actionItems = [];
     let resolvedItemIds = [];
@@ -849,6 +888,53 @@
       }
     }
 
+    async function submitYouTube() {
+      const urlInput = document.getElementById('youtubeUrl');
+      const url = urlInput.value.trim();
+      const errEl = document.getElementById('youtube-error');
+      errEl.style.display = 'none';
+
+      if (!url) {
+        errEl.textContent = '請輸入 YouTube 網址';
+        errEl.style.display = 'block';
+        return;
+      }
+      if (!url.includes('youtube.com') && !url.includes('youtu.be')) {
+        errEl.textContent = '請輸入有效的 YouTube 網址';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      const btn = document.getElementById('youtubeBtn');
+      btn.disabled = true;
+      btn.textContent = '處理中...';
+
+      try {
+        const res = await fetch(`${API}/api/youtube`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          errEl.textContent = err.detail || '無法處理此影片';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = '轉錄影片';
+          return;
+        }
+        const data = await res.json();
+        jobId = data.job_id;
+        goToStep(2);
+        startPolling();
+      } catch {
+        document.getElementById('server-error').style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '轉錄影片';
+      }
+    }
+
     // --- Step 2: Polling ---
     let pollTimer = null;
 
@@ -869,7 +955,13 @@
           clearInterval(pollTimer);
           showTranscribeError(data.error || '轉錄失敗');
         } else {
-          const labels = { pending: '等待處理...', processing: '轉錄中，請稍候...' };
+          const labels = {
+            pending: '等待處理...',
+            processing: '轉錄中，請稍候...',
+            downloading: '下載影片中...',
+            transcribing: '轉錄中，請稍候...',
+            analyzing: 'AI 分析中...',
+          };
           document.getElementById('progress-status').textContent = labels[data.status] || '處理中...';
         }
       } catch {
@@ -903,6 +995,7 @@
       }
       const data = await res.json();
       segments = data.segments;
+      paragraphs = data.paragraphs || [];
       decisions = data.decisions || [];
       actionItems = data.action_items || [];
       resolvedItemIds = data.resolved_item_ids || [];
@@ -917,12 +1010,28 @@
     function renderSegments() {
       const list = document.getElementById('segments-list');
       list.innerHTML = '';
-      segments.forEach(seg => {
-        const div = document.createElement('div');
-        div.className = 'segment-item';
-        div.innerHTML = `<span class="segment-text">${escapeHtml(seg.text)}</span>`;
-        list.appendChild(div);
-      });
+
+      // If paragraphs available, render grouped; otherwise render flat
+      if (paragraphs.length > 0) {
+        paragraphs.forEach((group, idx) => {
+          const div = document.createElement('div');
+          div.className = 'paragraph-group';
+          const texts = group.map(segId => segments[segId]?.text || '').join('');
+          div.innerHTML = `
+            <div class="paragraph-index">P${idx + 1}</div>
+            <div class="paragraph-text">${escapeHtml(texts)}</div>
+          `;
+          list.appendChild(div);
+        });
+      } else {
+        // Fallback: render each segment individually
+        segments.forEach(seg => {
+          const div = document.createElement('div');
+          div.className = 'segment-item';
+          div.innerHTML = `<span class="segment-text">${escapeHtml(seg.text)}</span>`;
+          list.appendChild(div);
+        });
+      }
     }
 
     function escapeHtml(str) {
@@ -1108,6 +1217,7 @@
     function startOver() {
       jobId = null;
       segments = [];
+      paragraphs = [];
       decisions = [];
       actionItems = [];
       resolvedItemIds = [];
@@ -1120,6 +1230,8 @@
       selectedFile = null;
       recordedBlob = null;
       document.getElementById('fileInput').value = '';
+      document.getElementById('youtubeUrl').value = '';
+      document.getElementById('youtube-error').style.display = 'none';
       document.getElementById('recordStatus').textContent = '';
       document.getElementById('recDot').style.display = 'none';
       document.getElementById('recTimer').style.display = 'none';
