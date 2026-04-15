@@ -15,7 +15,7 @@
 | `frontend-infra` | 5.x | worktree-agent-a591c286 | completed | 3/3 ✅ |
 | `frontend-composables` | 6.x | worktree-agent-a354667d | completed | 3/3 ✅ |
 | `frontend-ui` | 7.x | - | completed | 5/5 ✅ |
-| `integration` | 8.x | - | pending | 0/3 |
+| `integration` | 8.x | - | completed | 3/3 ✅ |
 
 ---
 
@@ -46,7 +46,7 @@ backend-storage (1.x) ✅
 | **Wave 1** | `backend-api` + `frontend-infra` | 無相互依賴 ✅ |
 | **Wave 2** | `backend-realtime` + `frontend-composables` | 完成 ✅ |
 | **Wave 3** | `frontend-ui` | 完成 ✅ |
-| **Wave 4** | `integration` | 需等所有完成 |
+| **Wave 4** | `integration` | 完成 ✅ |
 
 ---
 

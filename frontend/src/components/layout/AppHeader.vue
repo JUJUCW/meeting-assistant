@@ -12,6 +12,8 @@ const props = defineProps<{
   navTo?: string
   nav2Label?: string
   nav2To?: string
+  nav3Label?: string
+  nav3To?: string
 }>()
 
 const router = useRouter()
@@ -19,12 +21,15 @@ const router = useRouter()
 
 <template>
   <div class="header">
-    <div v-if="showBack || navTo || nav2To" class="header-nav">
+    <div v-if="showBack || navTo || nav2To || nav3To" class="header-nav">
       <button v-if="showBack" class="header-back-link" @click="router.push(props.backTo ?? '/')">
         {{ props.backLabel ?? '← 返回首頁' }}
       </button>
       <span v-else></span>
       <div class="header-nav-links">
+        <button v-if="nav3To" class="header-nav-link" @click="router.push(nav3To!)">
+          {{ nav3Label }}
+        </button>
         <button v-if="nav2To" class="header-nav-link" @click="router.push(nav2To!)">
           {{ nav2Label }}
         </button>
