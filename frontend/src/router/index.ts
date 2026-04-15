@@ -9,5 +9,19 @@ export default createRouter({
     { path: '/',          component: UploadView },
     { path: '/history',   component: HistoryView },
     { path: '/translate', component: TranslateView },
+    // Live translation feature routes
+    {
+      path: '/live-translate',
+      component: () => import('../views/LiveTranslateView.vue'),
+    },
+    {
+      path: '/translation-history',
+      component: () => import('../views/TranslationHistoryView.vue'),
+    },
+    {
+      path: '/translation/:id',
+      component: () => import('../views/TranslationDetailView.vue'),
+      props: true,
+    },
   ],
 })

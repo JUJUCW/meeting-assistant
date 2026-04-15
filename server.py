@@ -1,20 +1,26 @@
 # server.py
 import io
+import re
 import uuid
 import threading
 import tempfile
 import os
-from concurrent.futures import ThreadPoolExecutor
+from dataclasses import asdict
 from datetime import datetime
-from fastapi import FastAPI, UploadFile, File, HTTPException, Body
+from fastapi import FastAPI, UploadFile, File, HTTPException, Body, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from faster_whisper import WhisperModel
-from pydantic import BaseModel
-import yt_dlp
+import opencc
 import analyzer
 import storage
 import pdf_translator
+import translation_storage
+from translation_storage import Translation, Sentence
+from live_translator import LiveTranslator
+
+# Regex for validating translation ID format
+_TRANSLATION_ID_RE = re.compile(r"^T-\d{3,}$")
 
 app = FastAPI()
 
@@ -34,6 +40,7 @@ MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200 MB
 
 # Load model once at startup to avoid reloading on every transcription
 _whisper_model = WhisperModel("turbo", device="cpu", compute_type="int8")
+_converter = opencc.OpenCC('s2t')
 
 
 def _run_transcription(job_id: str, file_path: str):
@@ -46,19 +53,14 @@ def _run_transcription(job_id: str, file_path: str):
             initial_prompt="以下是繁體中文的會議記錄。",
         )
         segments = [
-            {"id": i, "text": seg.text.strip(), "tag": None}
+            {"id": i, "text": _converter.convert(seg.text.strip()), "tag": None}
             for i, seg in enumerate(segments_gen)
         ]
 
-        # AI analysis + paragraph segmentation (parallel)
+        # AI analysis
         transcript = "\n".join(s["text"] for s in segments)
         pending_items = storage.get_pending_action_items()
-
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            future_analysis = executor.submit(analyzer.analyze, transcript, pending_items)
-            future_paragraphs = executor.submit(analyzer.segment_paragraphs, segments)
-            analysis, ollama_available = future_analysis.result()
-            paragraphs, _ = future_paragraphs.result()
+        analysis, ollama_available = analyzer.analyze(transcript, pending_items)
 
         # Assign IDs to decisions and action items
         decisions = [
@@ -90,7 +92,6 @@ def _run_transcription(job_id: str, file_path: str):
 
         with jobs_lock:
             jobs[job_id]["segments"] = segments
-            jobs[job_id]["paragraphs"] = paragraphs
             jobs[job_id]["decisions"] = decisions
             jobs[job_id]["action_items"] = action_items
             jobs[job_id]["resolved_item_ids"] = analysis["resolved_action_item_ids"]
@@ -104,163 +105,6 @@ def _run_transcription(job_id: str, file_path: str):
     finally:
         if os.path.exists(file_path):
             os.unlink(file_path)
-
-
-def _download_youtube_audio(url: str, output_dir: str) -> tuple[str, dict]:
-    """Download audio from YouTube. Returns (file_path, metadata)."""
-    output_template = os.path.join(output_dir, "%(id)s.%(ext)s")
-    opts = {
-        "format": "bestaudio/best",
-        "postprocessors": [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": "192",
-        }],
-        "outtmpl": output_template,
-        "quiet": True,
-        "no_warnings": True,
-    }
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        video_id = info["id"]
-        title = info.get("title", "YouTube Video")
-        duration = info.get("duration", 0)
-    audio_path = os.path.join(output_dir, f"{video_id}.mp3")
-    return audio_path, {"title": title, "duration": duration, "id": video_id}
-
-
-def _run_youtube_transcription(job_id: str, url: str, tmp_dir: str):
-    """Background task: download YouTube audio and transcribe."""
-    audio_path = None
-    try:
-        # Step 1: Download
-        with jobs_lock:
-            jobs[job_id]["status"] = "downloading"
-        audio_path, meta = _download_youtube_audio(url, tmp_dir)
-        with jobs_lock:
-            jobs[job_id]["title"] = meta["title"]
-            jobs[job_id]["duration"] = meta["duration"]
-
-        # Step 2: Transcribe
-        with jobs_lock:
-            jobs[job_id]["status"] = "transcribing"
-        segments_gen, _ = _whisper_model.transcribe(
-            audio_path,
-            language="zh",
-            initial_prompt="以下是繁體中文的內容。",
-        )
-        segments = [
-            {"id": i, "text": seg.text.strip(), "tag": None}
-            for i, seg in enumerate(segments_gen)
-        ]
-
-        # Step 3: AI analysis + paragraph segmentation (parallel)
-        with jobs_lock:
-            jobs[job_id]["status"] = "analyzing"
-        transcript = "\n".join(s["text"] for s in segments)
-        pending_items = storage.get_pending_action_items()
-
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            future_analysis = executor.submit(analyzer.analyze, transcript, pending_items)
-            future_paragraphs = executor.submit(analyzer.segment_paragraphs, segments)
-            analysis, ollama_available = future_analysis.result()
-            paragraphs, _ = future_paragraphs.result()
-
-        # Assign IDs
-        decisions = [
-            {"id": f"d-{i+1}", "status": "confirmed", **d}
-            for i, d in enumerate(analysis["decisions"])
-        ]
-        action_items = [
-            {"id": f"a-{i+1}", "status": "pending", **a}
-            for i, a in enumerate(analysis["action_items"])
-        ]
-
-        # Save meeting
-        meeting_id = datetime.now().strftime("%Y-%m-%d_%H-%M")
-        meeting = {
-            "id": meeting_id,
-            "created_at": datetime.now().isoformat(timespec="seconds"),
-            "title": meta["title"],
-            "transcript": transcript,
-            "decisions": decisions,
-            "action_items": action_items,
-            "source": "youtube",
-            "youtube_url": url,
-        }
-        storage.save_meeting(meeting)
-
-        # Resolve historical items
-        item_id_to_meeting = {item["id"]: item["meeting_id"] for item in pending_items}
-        for item_id in analysis["resolved_action_item_ids"]:
-            source_meeting = item_id_to_meeting.get(item_id)
-            if source_meeting:
-                storage.resolve_action_item(source_meeting, item_id)
-
-        with jobs_lock:
-            jobs[job_id]["segments"] = segments
-            jobs[job_id]["paragraphs"] = paragraphs
-            jobs[job_id]["decisions"] = decisions
-            jobs[job_id]["action_items"] = action_items
-            jobs[job_id]["resolved_item_ids"] = analysis["resolved_action_item_ids"]
-            jobs[job_id]["meeting_id"] = meeting_id
-            jobs[job_id]["ollama_available"] = ollama_available
-            jobs[job_id]["status"] = "done"
-
-    except Exception as e:
-        with jobs_lock:
-            jobs[job_id]["status"] = "error"
-            jobs[job_id]["error"] = str(e)
-    finally:
-        # Cleanup temp directory
-        if audio_path and os.path.exists(audio_path):
-            os.unlink(audio_path)
-        if os.path.exists(tmp_dir):
-            try:
-                os.rmdir(tmp_dir)
-            except OSError:
-                pass
-
-
-class YouTubeRequest(BaseModel):
-    url: str
-
-
-@app.post("/api/youtube")
-async def youtube_transcribe(req: YouTubeRequest):
-    """Start YouTube video transcription job."""
-    url = req.url.strip()
-    if not url:
-        raise HTTPException(status_code=400, detail="URL is required")
-    if "youtube.com" not in url and "youtu.be" not in url:
-        raise HTTPException(status_code=400, detail="Invalid YouTube URL")
-
-    tmp_dir = tempfile.mkdtemp(prefix="yt_")
-    job_id = str(uuid.uuid4())
-
-    with jobs_lock:
-        jobs[job_id] = {
-            "status": "pending",
-            "segments": [],
-            "paragraphs": [],
-            "decisions": [],
-            "action_items": [],
-            "resolved_item_ids": [],
-            "meeting_id": None,
-            "ollama_available": None,
-            "error": None,
-            "title": None,
-            "duration": None,
-            "source": "youtube",
-        }
-
-    thread = threading.Thread(
-        target=_run_youtube_transcription,
-        args=(job_id, url, tmp_dir),
-        daemon=True,
-    )
-    thread.start()
-    return {"job_id": job_id}
 
 
 @app.post("/transcribe")
@@ -284,7 +128,6 @@ async def transcribe(file: UploadFile = File(...)):
         jobs[job_id] = {
             "status": "pending",
             "segments": [],
-            "paragraphs": [],
             "decisions": [],
             "action_items": [],
             "resolved_item_ids": [],
@@ -321,7 +164,6 @@ def result(job_id: str):
         raise HTTPException(status_code=202, detail="Not ready yet")
     return {
         "segments": job["segments"],
-        "paragraphs": job["paragraphs"],
         "decisions": job["decisions"],
         "action_items": job["action_items"],
         "resolved_item_ids": job["resolved_item_ids"],
@@ -602,3 +444,316 @@ def translate_delete(job_id: str):
     if not found:
         raise HTTPException(status_code=404, detail="Job not found")
     return {"status": "deleted"}
+
+
+# ── Live Translation History API ─────────────────────────────────────────────
+
+
+def _validate_translation_id(translation_id: str) -> None:
+    """Validate translation ID format (T-001, T-002, etc.)."""
+    if not _TRANSLATION_ID_RE.match(translation_id):
+        raise HTTPException(status_code=400, detail=f"Invalid translation ID format: {translation_id}")
+
+
+@app.post("/api/translations/start")
+def start_translation():
+    """Create a new translation session.
+
+    Returns 409 Conflict if an in_progress session already exists.
+    """
+    # Check for existing in_progress session
+    translations, _ = translation_storage.list_translations(status="in_progress", limit=1)
+    if translations:
+        return JSONResponse(
+            status_code=409,
+            content={"message": "Another session is in progress", "existing_id": translations[0].id},
+        )
+
+    # Generate new ID and create session
+    new_id = translation_storage.generate_id()
+    new_translation = Translation(
+        id=new_id,
+        name=f"Translation {new_id}",
+        started_at=datetime.now().isoformat(timespec="seconds"),
+        ended_at=None,
+        duration_sec=0,
+        source_lang="",
+        target_lang="zh-TW",
+        status="in_progress",
+        audio_path=None,
+        audio_size_bytes=None,
+        sentences=[],
+    )
+    translation_storage.save(new_translation)
+
+    return {"id": new_id}
+
+
+@app.get("/api/translations")
+def list_translations_endpoint(
+    page: int = 1,
+    limit: int = 8,
+    status: str | None = None,
+    source_lang: str | None = None,
+    target_lang: str | None = None,
+    q: str | None = None,
+):
+    """List translation sessions with filtering and pagination."""
+    if page < 1:
+        page = 1
+    if limit < 1 or limit > 100:
+        limit = 8
+
+    translations, total = translation_storage.list_translations(
+        page=page,
+        limit=limit,
+        status=status,
+        source_lang=source_lang,
+        target_lang=target_lang,
+        q=q,
+    )
+
+    # Convert to list items with sentence_count
+    items = []
+    for t in translations:
+        items.append({
+            "id": t.id,
+            "name": t.name,
+            "started_at": t.started_at,
+            "duration_sec": t.duration_sec,
+            "source_lang": t.source_lang,
+            "target_lang": t.target_lang,
+            "sentence_count": len(t.sentences),
+            "status": t.status,
+        })
+
+    return {
+        "translations": items,
+        "total": total,
+        "page": page,
+        "limit": limit,
+    }
+
+
+@app.get("/api/translations/{translation_id}")
+def get_translation(translation_id: str):
+    """Get translation detail with all sentences."""
+    _validate_translation_id(translation_id)
+
+    translation = translation_storage.load(translation_id)
+    if translation is None:
+        raise HTTPException(status_code=404, detail="Translation not found")
+
+    return asdict(translation)
+
+
+@app.patch("/api/translations/{translation_id}")
+def update_translation(translation_id: str, body: dict = Body(...)):
+    """Update translation name."""
+    _validate_translation_id(translation_id)
+
+    name = body.get("name")
+    if not name:
+        raise HTTPException(status_code=422, detail="name is required")
+
+    result = translation_storage.update_name(translation_id, name.strip())
+    if result is None:
+        raise HTTPException(status_code=404, detail="Translation not found")
+
+    return asdict(result)
+
+
+@app.delete("/api/translations/{translation_id}")
+def delete_translation(translation_id: str):
+    """Delete translation and associated audio file."""
+    _validate_translation_id(translation_id)
+
+    success = translation_storage.delete(translation_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Translation not found")
+
+    return {"status": "deleted"}
+
+
+@app.get("/api/translations/{translation_id}/audio")
+def download_translation_audio(translation_id: str):
+    """Download audio file for a translation session."""
+    _validate_translation_id(translation_id)
+
+    session = translation_storage.load(translation_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Translation not found")
+    if session.status == "in_progress":
+        raise HTTPException(status_code=404, detail="Recording still in progress")
+    if not session.audio_path:
+        raise HTTPException(status_code=404, detail="Audio file not found")
+
+    # Handle relative and absolute paths
+    audio_file = session.audio_path
+    if not os.path.isabs(audio_file):
+        # Use AUDIO_DIR parent for relative paths like "audio/T-001.wav"
+        audio_file = str(translation_storage.AUDIO_DIR.parent / audio_file)
+
+    if not os.path.exists(audio_file):
+        raise HTTPException(status_code=404, detail="Audio file not found")
+
+    def _iter():
+        with open(audio_file, "rb") as f:
+            yield from f
+
+    return StreamingResponse(
+        _iter(),
+        media_type="audio/wav",
+        headers={"Content-Disposition": f"attachment; filename={translation_id}.wav"},
+    )
+
+
+@app.get("/api/translations/{translation_id}/export/docx")
+def export_translation_docx(translation_id: str):
+    """Export translation session as DOCX."""
+    from docx import Document
+    from docx.shared import Pt
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+
+    _validate_translation_id(translation_id)
+
+    session = translation_storage.load(translation_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Translation not found")
+
+    doc = Document()
+    doc.add_heading(session.name, 0)
+    doc.add_paragraph(f"Created: {session.started_at[:10]}")
+    doc.add_paragraph(f"Duration: {session.duration_sec // 60}:{session.duration_sec % 60:02d}")
+
+    if session.source_lang:
+        doc.add_paragraph(f"Source: {session.source_lang} → {session.target_lang}")
+
+    doc.add_heading("Translation", level=1)
+
+    # Add sentence pairs with low-confidence highlighting
+    LOW_CONFIDENCE_THRESHOLD = 0.65
+    for sentence in session.sentences:
+        # Original text
+        p = doc.add_paragraph()
+        run = p.add_run(f"[{sentence.sequence}] {sentence.original_text}")
+
+        # Highlight low confidence with yellow background
+        if sentence.confidence < LOW_CONFIDENCE_THRESHOLD:
+            shd = OxmlElement("w:shd")
+            shd.set(qn("w:val"), "clear")
+            shd.set(qn("w:color"), "auto")
+            shd.set(qn("w:fill"), "FFFF00")  # Yellow
+            run._r.get_or_add_rPr().append(shd)
+
+        # Translation
+        if sentence.translated_text:
+            p_trans = doc.add_paragraph()
+            p_trans.add_run(f"    → {sentence.translated_text}")
+            p_trans.paragraph_format.space_after = Pt(12)
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename={translation_id}.docx"},
+    )
+
+
+# WebSocket endpoint for live translation
+_active_translators: dict[str, LiveTranslator] = {}
+
+
+@app.websocket("/api/translations/{translation_id}/stream")
+async def translation_websocket(websocket: WebSocket, translation_id: str):
+    """WebSocket endpoint for live translation streaming."""
+    # Validate session
+    session = translation_storage.load(translation_id)
+    if session is None:
+        await websocket.close(code=4004, reason="Session not found")
+        return
+    if session.status != "in_progress":
+        await websocket.close(code=4003, reason="Session not in progress")
+        return
+
+    await websocket.accept()
+
+    # Create callbacks for pushing messages
+    async def on_sentence(sentence: Sentence):
+        try:
+            await websocket.send_json({
+                "type": "sentence",
+                "data": asdict(sentence),
+            })
+        except Exception:
+            pass
+
+    async def on_translation(sentence_id: str, translated_text: str):
+        try:
+            await websocket.send_json({
+                "type": "translation",
+                "sentence_id": sentence_id,
+                "translated_text": translated_text,
+            })
+        except Exception:
+            pass
+
+    async def on_error(message: str):
+        try:
+            await websocket.send_json({
+                "type": "error",
+                "message": message,
+            })
+        except Exception:
+            pass
+
+    # Create translator with whisper model
+    translator = LiveTranslator(
+        session_id=translation_id,
+        whisper_model=_whisper_model,
+        on_sentence=lambda s: None,
+        on_translation=lambda sid, txt: None,
+        on_error=lambda msg: None,
+    )
+    translator.start()
+    _active_translators[translation_id] = translator
+
+    try:
+        while True:
+            message = await websocket.receive()
+
+            if message["type"] == "websocket.receive":
+                if "bytes" in message:
+                    # Audio chunk
+                    translator.add_audio_chunk(message["bytes"])
+                elif "text" in message:
+                    import json
+                    data = json.loads(message["text"])
+                    if data.get("type") == "stop":
+                        # Stop recording and finalize session
+                        translator.stop()
+                        await websocket.send_json({
+                            "type": "status",
+                            "status": "completed",
+                        })
+                        break
+            elif message["type"] == "websocket.disconnect":
+                # Abnormal disconnect - mark as interrupted
+                translator.stop()
+                session = translation_storage.load(translation_id)
+                if session:
+                    session.status = "interrupted"
+                    translation_storage.save(session)
+                break
+    except Exception as e:
+        await on_error(str(e))
+    finally:
+        _active_translators.pop(translation_id, None)
+        try:
+            await websocket.close()
+        except Exception:
+            pass
