@@ -5,10 +5,10 @@ import {
   updateTranslationName,
   deleteTranslation
 } from '../api/translations'
-import type { Translation, TranslationListParams, TranslationStatus } from '../types/translation'
+import type { Translation, TranslationListItem, TranslationListParams, TranslationStatus } from '../types/translation'
 
 export function useTranslations() {
-  const translations = ref<Translation[]>([])
+  const translations = ref<TranslationListItem[]>([])
   const total = ref(0)
   const currentPage = ref(1)
   const pageSize = ref(20)
@@ -78,7 +78,7 @@ export function useTranslations() {
       if (idx >= 0) {
         translations.value = [
           ...translations.value.slice(0, idx),
-          updated,
+          { ...translations.value[idx], name: updated.name },
           ...translations.value.slice(idx + 1)
         ]
       }
@@ -150,7 +150,7 @@ export function useTranslations() {
     list()
   }
 
-  function updateLocal(id: string, patch: Partial<Translation>): void {
+  function updateLocal(id: string, patch: Partial<TranslationListItem>): void {
     const idx = translations.value.findIndex(t => t.id === id)
     if (idx >= 0) {
       translations.value = [

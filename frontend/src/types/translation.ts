@@ -78,6 +78,9 @@ export type LiveTranslateServerMessage =
   | StatusMessage
   | ErrorMessage
 
+// Alias for backward compatibility
+export type WSMessage = LiveTranslateServerMessage
+
 /**
  * Client-to-server message types
  */
@@ -97,4 +100,16 @@ export interface StartTranslationResponse {
 export interface ConflictResponse {
   detail: string
   existing_id: string
+}
+
+/**
+ * Query parameters for listing translations
+ */
+export interface TranslationListParams {
+  page?: number
+  limit?: number
+  status?: TranslationStatus
+  source_lang?: string
+  target_lang?: string
+  q?: string
 }

@@ -24,8 +24,14 @@ export interface TranslationFilters {
  * POST /api/translations/start
  * @throws Error with detail if 409 Conflict (existing in_progress session)
  */
-export const startTranslation = (): Promise<StartTranslationResponse> =>
-  api.post<StartTranslationResponse>('/api/translations/start', {})
+export const startTranslation = (
+  name?: string,
+  targetLang?: string
+): Promise<StartTranslationResponse> =>
+  api.post<StartTranslationResponse>('/api/translations/start', {
+    name: name ?? undefined,
+    target_lang: targetLang ?? undefined
+  })
 
 /**
  * List translation sessions with optional filters
